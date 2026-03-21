@@ -1,5 +1,6 @@
 mod engine;
 mod events;
+mod tray;
 
 use engine::Engine;
 use std::sync::Arc;
@@ -13,6 +14,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(engine.clone())
         .setup(move |app| {
+            tray::setup_tray(app.handle())?;
+
             let engine = engine.clone();
             let handle = app.handle().clone();
 
