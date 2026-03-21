@@ -2,8 +2,15 @@
 
 **Author:** Lasha Kvantaliani
 **Date:** 2026-03-21
-**Status:** Draft v1
+**Status:** Draft v2
 **Parent spec:** `docs/superpowers/specs/2026-03-20-plugmux-design.md`
+
+**Deviations from parent spec:**
+- "Main" replaced with "Default" (just another environment)
+- Per-environment permissions replaced with global permissions
+- Catalog is bundled static JSON, not cloud-backed (cloud deferred to Phase 4)
+- Server names from catalog are not user-editable (standardized for docs/prompts; parent spec allowed renaming)
+- Usage stats and likes deferred (require cloud backend)
 
 ---
 
@@ -50,16 +57,19 @@ Two user files at `~/.config/plugmux/`:
 **`custom_servers.json`** — user-defined manual servers:
 
 ```json
-[
-  {
-    "id": "internal-db",
-    "name": "Internal DB",
-    "transport": "stdio",
-    "command": "node",
-    "args": ["./mcp-server.js"],
-    "connectivity": "local"
-  }
-]
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "internal-db",
+      "name": "Internal DB",
+      "transport": "stdio",
+      "command": "node",
+      "args": ["./mcp-server.js"],
+      "connectivity": "local"
+    }
+  ]
+}
 ```
 
 ### Key Changes from Phase 1/2
@@ -71,6 +81,7 @@ Two user files at `~/.config/plugmux/`:
 - **Servers are string IDs** — environments reference servers by ID, resolved against the catalog then custom_servers
 - **Server names are not user-editable for catalog servers** — standardized names enable consistent documentation, tutorials, and prompts
 - **Endpoint URLs computed at runtime** — `http://localhost:{port}/env/{id}`, not stored in config
+- **Port persisted in config** — `port` field in `config.json` replaces the in-memory-only port from Phase 2
 - **Separate files** — `config.json` for environments/settings, `custom_servers.json` for user-defined servers
 
 ### Server ID Resolution
@@ -79,6 +90,30 @@ When resolving a server ID:
 1. Look up in bundled `catalog/servers.json` → found? use catalog config
 2. Not in catalog → look up in `custom_servers.json` → found? use custom config
 3. Not in either → log warning, mark as unavailable (red dot), don't crash
+
+**ID collision rule:** Custom server IDs must not collide with catalog IDs. `add_custom_server` validates this and returns an error if the ID already exists in the catalog. This prevents ambiguity — catalog entries are canonical and cannot be overridden by custom servers.
+
+### Default Environment Bootstrapping
+
+- On first launch (no `config.json` exists), plugmux creates `config.json` with a single "default" environment containing no servers.
+- On every config load, if no environment with `id: "default"` exists, plugmux auto-creates it with an empty server list and logs a warning.
+- `delete_environment("default")` always returns an error: "The default environment cannot be deleted."
+- If the user manually deletes the default environment from the JSON file, the config watcher detects the change and re-creates it.
+
+### Migration from Phase 1/2
+
+On first launch after upgrade, if `~/.config/plugmux/plugmux.json` (old format) exists and `config.json` does not:
+
+1. Read old `plugmux.json`
+2. Create "default" environment with the servers from `main.servers`
+3. For each old environment: keep its servers list, drop overrides and per-environment permissions
+4. Any server that matches a catalog ID by command/url → convert to string reference
+5. Any server that doesn't match catalog → move to `custom_servers.json`, reference by ID
+6. Write `config.json` and `custom_servers.json`
+7. Rename `plugmux.json` → `plugmux.json.backup`
+8. Log: "Config migrated from Phase 2 format. Backup saved as plugmux.json.backup"
+
+CLI alternative: `plugmux config migrate` runs the same logic manually.
 
 ---
 
@@ -98,6 +133,14 @@ catalog/
 │   └── ...
 └── CONTRIBUTING.md   # community submission guide
 ```
+
+### Bundling
+
+The `catalog/` directory is embedded into both binaries at compile time:
+- **Tauri app:** included via Tauri's resource system (`tauri.conf.json` resources)
+- **CLI:** included via `include_str!` or `include_bytes!` macros for the JSON files; icons are not needed in CLI mode
+
+This means the catalog ships inside the binary — no external files to manage at runtime.
 
 ### `catalog/servers.json`
 
@@ -164,7 +207,19 @@ catalog/
 
 ## 4. Server Health States
 
-Every server displays a health indicator dot, consistent across all UI surfaces:
+Every server displays a health indicator dot, consistent across all UI surfaces.
+
+Server instances are **shared globally** — if "figma" appears in both "default" and "my-saas-app" environments, they share the same running MCP server process. The `ServerManager` manages one instance per server ID. Health status is therefore global per server ID, not per environment.
+
+### Health Status Enum
+
+```rust
+enum HealthStatus {
+    Healthy,                           // green — connected, running
+    Degraded { reason: String },       // yellow — auth required, config needed, partial
+    Unavailable { reason: String },    // red — not found, crashed, unreachable
+}
+```
 
 | State | Dot Color | Meaning | Action |
 |-------|-----------|---------|--------|
@@ -175,12 +230,50 @@ Every server displays a health indicator dot, consistent across all UI surfaces:
 Health dots appear on:
 - Server rows in environment pages
 - Server cards in catalog (for installed servers)
-- Sidebar environment badges (aggregate: worst status of any server)
+- Sidebar environment badges (aggregate: worst status of any server in that environment)
 - Tray icon (aggregate: worst status across all environments)
 
 ---
 
-## 5. UI Changes
+## 5. LLM-Facing Gateway Tools — Updated
+
+The Phase 1/2 gateway tools `enable_server` and `disable_server` toggled an `enabled` flag on servers. In the new model there is no toggle — a server is either in an environment's server list or it isn't.
+
+### Redefined Tools
+
+| Tool | Phase 1/2 Behavior | Phase 3 Behavior |
+|------|--------------------|------------------|
+| `list_servers` | List enabled+healthy servers | List servers in this environment (healthy ones) |
+| `get_tools` | Get tool schemas for a server | No change |
+| `execute` | Proxy call to upstream server | No change |
+| `enable_server(server_id)` | Toggle enabled flag | **Add server to this environment** (server must exist in catalog or custom_servers) |
+| `disable_server(server_id)` | Toggle enabled flag | **Remove server from this environment** |
+| `confirm_action(action_id)` | Confirm pending approval | No change |
+
+### Global Permission Check
+
+When an LLM calls `enable_server` or `disable_server` through an environment endpoint:
+
+1. Read the global `permissions` from `config.json`
+2. Check the permission level for that action
+3. If **allow** → execute immediately (add/remove server from environment)
+4. If **approve** → return `approval_required` with `action_id`. The `PendingAction` stores the action type, server_id, and env_id. LLM calls `confirm_action(action_id)` after getting user consent.
+5. If **disable** → return error: "This action is not available"
+
+The `PendingAction` struct:
+```rust
+struct PendingAction {
+    id: String,
+    action: String,          // "enable_server" or "disable_server"
+    server_id: String,
+    env_id: String,          // derived from the endpoint the LLM connected to
+    created_at: Instant,     // expires after 5 minutes
+}
+```
+
+---
+
+## 6. UI Changes
 
 ### Sidebar — Updated
 
@@ -189,7 +282,7 @@ Health dots appear on:
 
 ### Catalog Page — New (Replacing Placeholder)
 
-- **Search bar** at top — text filtering by name, description
+- **Search bar** at top — case-insensitive substring match on name + description
 - **Category filter pills** below search — "All" + each category
 - **Server cards** in responsive grid:
   - Server icon (from `catalog/icons/`)
@@ -225,8 +318,8 @@ Show preset cards from `catalog/presets.json`:
 
 ### Settings Page — Updated
 
-- **Gateway:** port, engine status, start/stop
-- **Permissions:** global permission dropdowns (allow/approve/disable) for each gateway action (`enable_server`, `disable_server`, etc.)
+- **Gateway:** port (persisted to `config.json` on change), engine status, start/stop
+- **Permissions:** global permission dropdowns (allow/approve/disable) for each gateway action (`enable_server`, `disable_server`)
 - **Startup:** autostart toggle
 - **Appearance:** dark/light theme
 - **Custom Servers:** list of user-defined servers from `custom_servers.json`, with add/edit/remove
@@ -265,7 +358,7 @@ Show preset cards from `catalog/presets.json`:
 
 ---
 
-## 6. Tauri Commands
+## 7. Tauri Commands
 
 ### Removed (Phase 1/2 commands no longer needed)
 
@@ -280,7 +373,7 @@ Show preset cards from `catalog/presets.json`:
 // Config
 get_config() -> Config
 get_port() -> u16
-set_port(port: u16) -> Result<()>
+set_port(port: u16) -> Result<()>          // persists to config.json
 
 // Permissions (global)
 get_permissions() -> Permissions
@@ -298,7 +391,8 @@ remove_server_from_env(env_id: String, server_id: String) -> Result<()>
 
 // Custom servers
 list_custom_servers() -> Vec<ServerConfig>
-add_custom_server(config: ServerConfig) -> Result<()>
+add_custom_server(config: ServerConfig) -> Result<()>  // validates ID not in catalog
+update_custom_server(id: String, config: ServerConfig) -> Result<()>
 remove_custom_server(id: String) -> Result<()>
 
 // Catalog (read-only, bundled)
@@ -312,6 +406,9 @@ create_env_from_preset(preset_id: String, name: String) -> Result<Environment>
 
 // Health
 get_server_health(server_id: String) -> HealthStatus
+
+// Migration
+migrate_config() -> Result<()>             // manual trigger for Phase 2 migration
 ```
 
 ### Events
@@ -319,8 +416,8 @@ get_server_health(server_id: String) -> HealthStatus
 ```
 engine_status_changed    { status: "running" | "stopped" | "conflict" }
 server_health_changed    { server_id, status: "healthy" | "degraded" | "unavailable" }
-server_added             { server_id, env_id }
-server_removed           { server_id, env_id }
+server_added             { server_id, env_id }        // always has env_id (no longer optional)
+server_removed           { server_id, env_id }        // always has env_id (no longer optional)
 environment_created      { env_id }
 environment_deleted      { env_id }
 config_reloaded          { }
@@ -328,7 +425,7 @@ config_reloaded          { }
 
 ---
 
-## 7. CLI Updates
+## 8. CLI Updates
 
 ### Removed Commands
 
@@ -355,6 +452,7 @@ plugmux server list --env <env-id>
 
 # Custom servers
 plugmux custom add --id my-tool --name "My Tool" --transport stdio --command "node" --args "./server.js"
+plugmux custom edit <id> [--name "New Name"] [--command "new-cmd"]
 plugmux custom remove <id>
 plugmux custom list
 
@@ -366,11 +464,12 @@ plugmux catalog list
 # Config
 plugmux config path
 plugmux config show
+plugmux config migrate                    # manual Phase 2 migration
 ```
 
 ---
 
-## 8. Community Contribution Workflow
+## 9. Community Contribution Workflow
 
 ### Submission Process
 
@@ -406,7 +505,7 @@ Maintainer verifies:
 
 ---
 
-## 9. Refactoring Impact
+## 10. Refactoring Impact
 
 ### plugmux-core — Deleted
 
@@ -417,21 +516,24 @@ Maintainer verifies:
 
 ### plugmux-core — Refactored
 
-- `config.rs` → new `Config` struct (port, permissions, environments), loads `config.json`
+- `config.rs` → new `Config` struct (port, permissions, environments), loads `config.json`. Port now persisted to disk.
 - `server.rs` → `ServerConfig` remains similar, used for custom_servers
-- `gateway/tools.rs` → permissions check becomes global
-- `manager.rs` → uses resolved configs from new resolver
+- `gateway/tools.rs` → `enable_server`/`disable_server` now add/remove servers from environment. Permission check reads global permissions, ignores env_id.
+- `manager.rs` → uses resolved configs from new resolver. One server instance per ID globally (shared across environments).
+- `pending_actions.rs` → `PendingAction` stores action type, server_id, and env_id. Approval flow unchanged except permissions are global.
 
 ### plugmux-core — New
 
-- `catalog.rs` → `CatalogRegistry` loads bundled `servers.json`, provides lookup by ID
-- `custom_servers.rs` → loads `~/.config/plugmux/custom_servers.json`
-- `resolver.rs` → resolves server ID to full config (catalog first, then custom_servers)
+- `catalog.rs` → `CatalogRegistry` loads bundled `servers.json` at startup, provides lookup by ID, search by query/category
+- `custom_servers.rs` → loads `~/.config/plugmux/custom_servers.json`, provides CRUD operations
+- `resolver.rs` → resolves server ID to full config (catalog first, then custom_servers). Validates no ID collisions.
+- `migration.rs` → migrates Phase 2 `plugmux.json` to new `config.json` + `custom_servers.json` format
 
 ### plugmux-app (Tauri)
 
 - `commands.rs` → rewritten for new command set
 - `engine.rs` → updated to use new config + resolver
+- Config watcher updated to watch both `config.json` and `custom_servers.json`
 
 ### plugmux-app (React)
 
@@ -448,10 +550,11 @@ Maintainer verifies:
 ### plugmux-cli
 
 - Command handlers updated for new config model and command structure
+- New `plugmux config migrate` command
 
 ---
 
-## 10. Not Included in Phase 3
+## 11. Not Included in Phase 3
 
 - Cloud sync / accounts (Phase 4)
 - GitHub OAuth (Phase 4)
@@ -463,4 +566,4 @@ Maintainer verifies:
 
 ---
 
-*plugmux Phase 3 Spec — Lasha Kvantaliani — March 2026 — Draft v1*
+*plugmux Phase 3 Spec — Lasha Kvantaliani — March 2026 — Draft v2*
