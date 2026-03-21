@@ -71,6 +71,17 @@ pub fn run() {
                 }
             });
 
+            // Hide window on close instead of quitting (tray keeps running)
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
+            }
+
             // Start config file watcher (keep watcher alive for app lifetime)
             match watcher::start_config_watcher(app.handle().clone(), engine_for_watcher) {
                 Ok(w) => { app.manage(w); }
