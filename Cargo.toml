@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/plugmux-core", "crates/plugmux-cli"]
+members = ["crates/plugmux-core", "crates/plugmux-cli", "crates/plugmux-app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

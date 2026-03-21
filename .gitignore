@@ -1,1 +1,20 @@
+# Build
 /target
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Rust
+*.rs.bk
+
+# Tauri (Phase 2)
+crates/plugmux-app/src-tauri/target/
+node_modules/
+dist/
+.env
