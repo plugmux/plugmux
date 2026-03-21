@@ -11,6 +11,8 @@ slug = "0.1"
 thiserror = "2"
 tracing = "0.1"
 dirs = "6"
+async-trait = "0.1"
+rmcp = { version = "1.2", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
 
 [dev-dependencies]
 tempfile = "3"
