@@ -28,8 +28,6 @@ pub struct ServerConfig {
     pub url: Option<String>,
     #[serde(default = "default_connectivity")]
     pub connectivity: Connectivity,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -38,6 +36,12 @@ fn default_connectivity() -> Connectivity {
     Connectivity::Local
 }
 
-fn default_true() -> bool {
-    true
+/// Runtime health of a server connection.
+/// Serialises as `{"status": "healthy"}` or `{"status": "degraded", "reason": "..."}`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "status", rename_all = "lowercase")]
+pub enum HealthStatus {
+    Healthy,
+    Degraded { reason: String },
+    Unavailable { reason: String },
 }

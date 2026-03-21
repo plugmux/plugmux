@@ -1,9 +1,13 @@
+pub mod catalog;
 pub mod config;
+pub mod custom_servers;
 pub mod environment;
 pub mod gateway;
 pub mod health;
 pub mod manager;
+pub mod migration;
 pub mod pending_actions;
 pub mod proxy;
+pub mod resolver;
 pub mod server;
 pub mod slug;
