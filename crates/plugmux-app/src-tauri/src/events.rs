@@ -5,6 +5,7 @@ pub struct EngineStatusPayload {
     pub status: String, // "running", "stopped", "conflict"
 }
 
+#[allow(dead_code)] // Used when health checker emits events (wired in future)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerHealthPayload {
     pub server_id: String,
@@ -33,6 +34,7 @@ pub struct EnvironmentChangedPayload {
 
 // Event name constants
 pub const ENGINE_STATUS_CHANGED: &str = "engine_status_changed";
+#[allow(dead_code)] // Used when health checker emits events (wired in future)
 pub const SERVER_HEALTH_CHANGED: &str = "server_health_changed";
 pub const SERVER_ADDED: &str = "server_added";
 pub const SERVER_REMOVED: &str = "server_removed";

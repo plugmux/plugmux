@@ -15,6 +15,7 @@ use plugmux_core::manager::ServerManager;
 pub enum EngineStatus {
     Stopped,
     Running,
+    #[allow(dead_code)] // Set when port bind fails
     Conflict,
 }
 
