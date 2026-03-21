@@ -1,3 +1,4 @@
+mod commands;
 mod engine;
 mod events;
 mod tray;
@@ -13,6 +14,28 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(engine.clone())
+        .invoke_handler(tauri::generate_handler![
+            commands::get_engine_status,
+            commands::start_engine,
+            commands::stop_engine,
+            commands::get_config,
+            commands::get_main_servers,
+            commands::add_main_server,
+            commands::remove_main_server,
+            commands::toggle_main_server,
+            commands::rename_server,
+            commands::list_environments,
+            commands::create_environment,
+            commands::delete_environment,
+            commands::rename_environment,
+            commands::add_env_server,
+            commands::remove_env_server,
+            commands::toggle_env_override,
+            commands::get_permissions,
+            commands::set_permission,
+            commands::get_port,
+            commands::set_port,
+        ])
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
 
