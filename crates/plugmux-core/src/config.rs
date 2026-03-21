@@ -28,7 +28,7 @@ pub enum ConfigError {
 // ---------------------------------------------------------------------------
 
 fn default_port() -> u16 {
-    3000
+    4242
 }
 
 fn default_approve() -> PermissionLevel {
@@ -291,7 +291,7 @@ mod tests {
     fn test_ensure_default_creates_missing_default() {
         let json = r#"
         {
-            "port": 3000,
+            "port": 4242,
             "environments": [
                 {
                     "id": "work",
@@ -321,7 +321,7 @@ mod tests {
 
         let cfg = load_or_default(&path);
         assert!(find_environment(&cfg, "default").is_some());
-        assert_eq!(cfg.port, 3000);
+        assert_eq!(cfg.port, 4242);
     }
 
     // -----------------------------------------------------------------------
@@ -410,8 +410,8 @@ mod tests {
     }
 
     #[test]
-    fn test_port_defaults_to_3000() {
+    fn test_port_defaults_to_4242() {
         let cfg = default_config();
-        assert_eq!(cfg.port, 3000);
+        assert_eq!(cfg.port, 4242);
     }
 }
