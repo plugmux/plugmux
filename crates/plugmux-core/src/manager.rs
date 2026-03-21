@@ -13,13 +13,13 @@ use tracing::{info, warn};
 use crate::proxy::http_sse::HttpSseMcpClient;
 use crate::proxy::stdio::StdioMcpClient;
 use crate::proxy::{McpClient, ProxyError, ToolInfo};
-use crate::server::{ServerConfig, Transport};
+use crate::server::{HealthStatus, ServerConfig, Transport};
 
 /// A running MCP server together with its configuration and health status.
 pub struct ManagedServer {
     pub config: ServerConfig,
     pub client: Box<dyn McpClient>,
-    pub healthy: bool,
+    pub health: HealthStatus,
 }
 
 /// Owns all running MCP client connections.
@@ -73,7 +73,7 @@ impl ServerManager {
         let managed = ManagedServer {
             config,
             client,
-            healthy: true,
+            health: HealthStatus::Healthy,
         };
 
         self.servers.write().await.insert(id.clone(), managed);
@@ -118,24 +118,32 @@ impl ServerManager {
     }
 
     /// List all managed servers with their health status.
-    pub async fn list_servers(&self) -> Vec<(String, bool)> {
+    pub async fn list_servers(&self) -> Vec<(String, HealthStatus)> {
         let map = self.servers.read().await;
         map.iter()
-            .map(|(id, ms)| (id.clone(), ms.healthy))
+            .map(|(id, ms)| (id.clone(), ms.health.clone()))
             .collect()
     }
 
     /// Check whether a specific server is healthy.
     pub async fn is_healthy(&self, server_id: &str) -> bool {
         let map = self.servers.read().await;
-        map.get(server_id).map(|ms| ms.healthy).unwrap_or(false)
+        map.get(server_id)
+            .map(|ms| matches!(ms.health, HealthStatus::Healthy))
+            .unwrap_or(false)
+    }
+
+    /// Get the health status of a specific server.
+    pub async fn get_health(&self, server_id: &str) -> Option<HealthStatus> {
+        let map = self.servers.read().await;
+        map.get(server_id).map(|ms| ms.health.clone())
     }
 
     /// Update the health status of a specific server.
-    pub async fn set_health(&self, id: &str, healthy: bool) {
+    pub async fn set_health(&self, id: &str, health: HealthStatus) {
         let mut map = self.servers.write().await;
         if let Some(ms) = map.get_mut(id) {
-            ms.healthy = healthy;
+            ms.health = health;
         }
     }
 
