@@ -1,12 +1,52 @@
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { Layout } from "@/components/layout/Layout";
+import { MainPage } from "@/pages/MainPage";
+import { EnvironmentPage } from "@/pages/EnvironmentPage";
+import { CatalogPage } from "@/pages/CatalogPage";
+import { PresetsPage } from "@/pages/PresetsPage";
+import { SettingsPage } from "@/pages/SettingsPage";
+import { CreateEnvironmentDialog } from "@/components/environments/CreateEnvironmentDialog";
 
 function App() {
+  const [activePage, setActivePage] = useState("main");
+  const [newEnvOpen, setNewEnvOpen] = useState(false);
+
+  function renderPage() {
+    if (activePage.startsWith("env:")) {
+      const envId = activePage.slice(4);
+      return <EnvironmentPage envId={envId} />;
+    }
+
+    switch (activePage) {
+      case "main":
+        return <MainPage />;
+      case "catalog":
+        return <CatalogPage />;
+      case "presets":
+        return <PresetsPage />;
+      case "settings":
+        return <SettingsPage />;
+      default:
+        return <MainPage />;
+    }
+  }
+
   return (
-    <div className="h-screen bg-background text-foreground flex items-center justify-center gap-4">
-      <Button>plugmux</Button>
-      <Badge variant="secondary">v0.1.0</Badge>
-    </div>
+    <Layout
+      activePage={activePage}
+      onNavigate={setActivePage}
+      onNewEnvironment={() => setNewEnvOpen(true)}
+    >
+      {renderPage()}
+      <CreateEnvironmentDialog
+        open={newEnvOpen}
+        onOpenChange={setNewEnvOpen}
+        onCreated={(envId) => {
+          setNewEnvOpen(false);
+          setActivePage(`env:${envId}`);
+        }}
+      />
+    </Layout>
   );
 }
 
