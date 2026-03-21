@@ -37,6 +37,10 @@ pub fn run() {
             commands::get_port,
             commands::set_port,
         ])
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(move |app| {
             tray::setup_tray(app.handle())?;
 
