@@ -4,17 +4,19 @@
 use std::sync::Arc;
 
 use serde_json::Value;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Permission, PlugmuxConfig, ServerOverride};
 use crate::environment::resolve_named;
 use crate::manager::ServerManager;
+use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ToolInfo};
 
 /// The business logic layer for the gateway's LLM-facing tools.
 pub struct GatewayTools {
     pub config: Arc<RwLock<PlugmuxConfig>>,
     pub manager: Arc<ServerManager>,
+    pending: Mutex<PendingActions>,
 }
 
 /// Summary information about a server, returned by `list_servers`.
@@ -37,7 +39,11 @@ enum PermissionLevel {
 impl GatewayTools {
     /// Create a new `GatewayTools` instance.
     pub fn new(config: Arc<RwLock<PlugmuxConfig>>, manager: Arc<ServerManager>) -> Self {
-        Self { config, manager }
+        Self {
+            config,
+            manager,
+            pending: Mutex::new(PendingActions::new()),
+        }
     }
 
     /// List servers available in an environment, filtered to healthy ones,
@@ -165,6 +171,68 @@ impl GatewayTools {
         Ok(())
     }
 
+    /// Confirm a pending action that requires user approval.
+    pub async fn confirm_action(&self, action_id: &str) -> Result<(), ProxyError> {
+        let mut pending = self.pending.lock().await;
+        let action = pending.confirm(action_id).ok_or_else(|| {
+            ProxyError::ToolCallFailed(
+                "action expired or not found — please retry the original action".to_string(),
+            )
+        })?;
+        drop(pending);
+
+        match action.action.as_str() {
+            "enable_server" => {
+                let mut cfg = self.config.write().await;
+                if let Some(env) =
+                    cfg.environments.iter_mut().find(|e| e.id == action.env_id)
+                {
+                    if let Some(ov) = env
+                        .overrides
+                        .iter_mut()
+                        .find(|o| o.server_id == action.server_id)
+                    {
+                        ov.enabled = Some(true);
+                    } else {
+                        env.overrides.push(ServerOverride {
+                            server_id: action.server_id,
+                            enabled: Some(true),
+                            url: None,
+                            permissions: None,
+                        });
+                    }
+                }
+                Ok(())
+            }
+            "disable_server" => {
+                let mut cfg = self.config.write().await;
+                if let Some(env) =
+                    cfg.environments.iter_mut().find(|e| e.id == action.env_id)
+                {
+                    if let Some(ov) = env
+                        .overrides
+                        .iter_mut()
+                        .find(|o| o.server_id == action.server_id)
+                    {
+                        ov.enabled = Some(false);
+                    } else {
+                        env.overrides.push(ServerOverride {
+                            server_id: action.server_id,
+                            enabled: Some(false),
+                            url: None,
+                            permissions: None,
+                        });
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(ProxyError::ToolCallFailed(format!(
+                "unknown action: {}",
+                action.action
+            ))),
+        }
+    }
+
     /// Check the permission for an action on a server within an environment.
     ///
     /// Permission resolution:
@@ -183,9 +251,22 @@ impl GatewayTools {
         let level = self.resolve_permission(env_id, server_id, action).await;
         match level {
             PermissionLevel::Allow => Ok(()),
-            PermissionLevel::Approve => Err(ProxyError::ToolCallFailed(format!(
-                "action '{action}' on server '{server_id}' requires user approval"
-            ))),
+            PermissionLevel::Approve => {
+                let mut pending = self.pending.lock().await;
+                let action_id =
+                    if let Some(existing) = pending.find_existing(env_id, server_id, action) {
+                        existing.to_string()
+                    } else {
+                        pending.add(env_id, server_id, action)
+                    };
+                Err(ProxyError::ApprovalRequired {
+                    action_id,
+                    message: format!(
+                        "Action '{action}' on server '{server_id}' requires approval. \
+                         Please confirm with the user."
+                    ),
+                })
+            }
             PermissionLevel::Deny => Err(ProxyError::ToolCallFailed(format!(
                 "action '{action}' on server '{server_id}' is disabled"
             ))),

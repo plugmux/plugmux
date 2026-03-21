@@ -17,6 +17,11 @@ pub enum ProxyError {
     Transport(String),
     #[error("timeout")]
     Timeout,
+    #[error("approval required: {message}")]
+    ApprovalRequired {
+        action_id: String,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone)]

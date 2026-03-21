@@ -3,6 +3,7 @@ pub mod environment;
 pub mod gateway;
 pub mod health;
 pub mod manager;
+pub mod pending_actions;
 pub mod proxy;
 pub mod server;
 pub mod slug;

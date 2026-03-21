@@ -18,6 +18,7 @@ use tracing::{error, info};
 use crate::config::PlugmuxConfig;
 use crate::gateway::tools::GatewayTools;
 use crate::manager::ServerManager;
+use crate::proxy::ProxyError;
 
 // ---------------------------------------------------------------------------
 // Shared application state
@@ -95,6 +96,26 @@ async fn handle_jsonrpc(
                 "result": value,
             })),
         ),
+        Err(ProxyError::ApprovalRequired {
+            action_id,
+            message,
+        }) => (
+            StatusCode::OK,
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "content": [{
+                        "type": "text",
+                        "text": serde_json::to_string(&json!({
+                            "status": "approval_required",
+                            "action_id": action_id,
+                            "message": message,
+                        })).unwrap(),
+                    }]
+                }
+            })),
+        ),
         Err(err) => {
             error!(method = %method, env = %env_id, error = %err, "JSON-RPC error");
             (
@@ -104,7 +125,7 @@ async fn handle_jsonrpc(
                     "id": id,
                     "error": {
                         "code": -32603,
-                        "message": err,
+                        "message": err.to_string(),
                     },
                 })),
             )
@@ -118,12 +139,12 @@ async fn dispatch(
     env_id: &str,
     method: &str,
     params: &Value,
-) -> Result<Value, String> {
+) -> Result<Value, ProxyError> {
     match method {
         "initialize" => Ok(handle_initialize()),
         "tools/list" => Ok(handle_tools_list()),
         "tools/call" => handle_tools_call(tools, env_id, params).await,
-        _ => Err(format!("unknown method: {method}")),
+        _ => Err(ProxyError::Transport(format!("unknown method: {method}"))),
     }
 }
 
@@ -223,6 +244,20 @@ fn handle_tools_list() -> Value {
                     },
                     "required": ["server_id"]
                 }
+            },
+            {
+                "name": "confirm_action",
+                "description": "Confirm a pending action that requires user approval",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action_id": {
+                            "type": "string",
+                            "description": "The action ID"
+                        }
+                    },
+                    "required": ["action_id"]
+                }
             }
         ]
     })
@@ -236,11 +271,13 @@ async fn handle_tools_call(
     tools: &GatewayTools,
     env_id: &str,
     params: &Value,
-) -> Result<Value, String> {
+) -> Result<Value, ProxyError> {
     let tool_name = params
         .get("name")
         .and_then(|n| n.as_str())
-        .ok_or_else(|| "missing 'name' in tools/call params".to_string())?;
+        .ok_or_else(|| {
+            ProxyError::Transport("missing 'name' in tools/call params".to_string())
+        })?;
 
     let args = params
         .get("arguments")
@@ -249,10 +286,7 @@ async fn handle_tools_call(
 
     match tool_name {
         "list_servers" => {
-            let servers = tools
-                .list_servers(env_id)
-                .await
-                .map_err(|e| e.to_string())?;
+            let servers = tools.list_servers(env_id).await?;
 
             let result: Vec<Value> = servers
                 .into_iter()
@@ -273,12 +307,11 @@ async fn handle_tools_call(
             let server_id = args
                 .get("server_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'server_id' argument".to_string())
+                })?;
 
-            let tool_list = tools
-                .get_tools(server_id)
-                .await
-                .map_err(|e| e.to_string())?;
+            let tool_list = tools.get_tools(server_id).await?;
 
             let result: Vec<Value> = tool_list
                 .into_iter()
@@ -298,12 +331,16 @@ async fn handle_tools_call(
             let server_id = args
                 .get("server_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'server_id' argument".to_string())
+                })?;
 
             let exec_tool_name = args
                 .get("tool_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'tool_name' argument".to_string())?;
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'tool_name' argument".to_string())
+                })?;
 
             let exec_args = args
                 .get("args")
@@ -312,8 +349,7 @@ async fn handle_tools_call(
 
             let result = tools
                 .execute(server_id, exec_tool_name, exec_args)
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
 
             // Pass through the upstream result directly.
             Ok(result)
@@ -323,12 +359,11 @@ async fn handle_tools_call(
             let server_id = args
                 .get("server_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'server_id' argument".to_string())
+                })?;
 
-            tools
-                .enable_server(env_id, server_id)
-                .await
-                .map_err(|e| e.to_string())?;
+            tools.enable_server(env_id, server_id).await?;
 
             Ok(wrap_content("server enabled"))
         }
@@ -337,17 +372,31 @@ async fn handle_tools_call(
             let server_id = args
                 .get("server_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'server_id' argument".to_string())
+                })?;
 
-            tools
-                .disable_server(env_id, server_id)
-                .await
-                .map_err(|e| e.to_string())?;
+            tools.disable_server(env_id, server_id).await?;
 
             Ok(wrap_content("server disabled"))
         }
 
-        _ => Err(format!("unknown tool: {tool_name}")),
+        "confirm_action" => {
+            let action_id = args
+                .get("action_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    ProxyError::Transport("missing 'action_id' argument".to_string())
+                })?;
+
+            tools.confirm_action(action_id).await?;
+
+            Ok(wrap_content("action confirmed and executed"))
+        }
+
+        _ => Err(ProxyError::Transport(format!(
+            "unknown tool: {tool_name}"
+        ))),
     }
 }
 
