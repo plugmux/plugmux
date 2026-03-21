@@ -2906,6 +2906,7 @@ dependencies = [
 name = "plugmux-app"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "notify",
  "plugmux-core",
  "serde",
