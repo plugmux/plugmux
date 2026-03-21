@@ -220,16 +220,12 @@ impl GatewayTools {
 /// Determine the permission level for a specific action based on the allow/deny lists.
 fn resolve_permission_level(perm: &Permission, action: &str) -> PermissionLevel {
     // Deny takes precedence.
-    if let Some(ref deny) = perm.deny {
-        if deny.iter().any(|a| a == action) {
-            return PermissionLevel::Deny;
-        }
+    if perm.deny.as_ref().is_some_and(|deny| deny.iter().any(|a| a == action)) {
+        return PermissionLevel::Deny;
     }
 
-    if let Some(ref allow) = perm.allow {
-        if allow.iter().any(|a| a == action) {
-            return PermissionLevel::Allow;
-        }
+    if perm.allow.as_ref().is_some_and(|allow| allow.iter().any(|a| a == action)) {
+        return PermissionLevel::Allow;
     }
 
     // Default: requires approval.

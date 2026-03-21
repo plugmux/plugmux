@@ -7,6 +7,10 @@ edition.workspace = true
 name = "plugmux"
 path = "src/main.rs"
 
+[[bin]]
+name = "mock-mcp-server"
+path = "src/bin/mock_mcp_server.rs"
+
 [dependencies]
 plugmux-core = { path = "../plugmux-core" }
 clap = { version = "4", features = ["derive"] }
@@ -14,3 +18,9 @@ tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3"
 reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1"
+rmcp = { version = "1.2", features = ["server", "transport-async-rw", "transport-io"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+axum = "0.8"

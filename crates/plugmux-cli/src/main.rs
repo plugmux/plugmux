@@ -56,9 +56,9 @@ async fn main() {
         Commands::Start { port } => commands::start::run(*port).await,
         Commands::Stop { port } => commands::stop::run(*port).await,
         Commands::Status { port } => commands::status::run(*port).await,
-        Commands::Env { command } => commands::env::run(command).map_err(Into::into),
-        Commands::Server { command } => commands::server::run(command).map_err(Into::into),
-        Commands::Config { command } => commands::config::run(command).map_err(Into::into),
+        Commands::Env { command } => commands::env::run(command),
+        Commands::Server { command } => commands::server::run(command),
+        Commands::Config { command } => commands::config::run(command),
     };
 
     if let Err(e) = result {

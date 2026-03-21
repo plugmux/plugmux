@@ -30,10 +30,8 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Start all enabled Main servers
     for server in &cfg.main.servers {
-        if server.enabled {
-            if let Err(e) = manager.start_server(server.clone()).await {
-                eprintln!("  [warn] failed to start main server '{}': {}", server.id, e);
-            }
+        if server.enabled && let Err(e) = manager.start_server(server.clone()).await {
+            eprintln!("  [warn] failed to start main server '{}': {}", server.id, e);
         }
     }
 
@@ -42,13 +40,13 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
         let resolved = resolve_named(&cfg, &env.id).unwrap_or_default();
         for rs in &resolved {
             // Only start env-specific servers (main servers already started above)
-            if rs.source == plugmux_core::environment::ServerSource::Environment {
-                if let Err(e) = manager.start_server(rs.config.clone()).await {
-                    eprintln!(
-                        "  [warn] failed to start server '{}' for env '{}': {}",
-                        rs.config.id, env.id, e
-                    );
-                }
+            if rs.source == plugmux_core::environment::ServerSource::Environment
+                && let Err(e) = manager.start_server(rs.config.clone()).await
+            {
+                eprintln!(
+                    "  [warn] failed to start server '{}' for env '{}': {}",
+                    rs.config.id, env.id, e
+                );
             }
         }
     }
