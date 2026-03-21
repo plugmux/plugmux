@@ -2,10 +2,11 @@ mod commands;
 mod engine;
 mod events;
 mod tray;
+mod watcher;
 
 use engine::Engine;
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 pub fn run() {
     tracing_subscriber::fmt::init();
@@ -40,6 +41,7 @@ pub fn run() {
             tray::setup_tray(app.handle())?;
 
             let engine = engine.clone();
+            let engine_for_watcher = engine.clone();
             let handle = app.handle().clone();
 
             // Auto-start engine
@@ -64,6 +66,12 @@ pub fn run() {
                     }
                 }
             });
+
+            // Start config file watcher (keep watcher alive for app lifetime)
+            match watcher::start_config_watcher(app.handle().clone(), engine_for_watcher) {
+                Ok(w) => { app.manage(w); }
+                Err(e) => { tracing::warn!(error = %e, "config watcher not available"); }
+            }
 
             Ok(())
         })
