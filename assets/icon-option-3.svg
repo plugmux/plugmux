@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="white">
+  <!-- Option 3: Solid rounded shield/badge with internal mux lines -->
+  <rect x="6" y="6" width="52" height="52" rx="14" />
+  <!-- Internal cutouts (dark) -->
+  <g fill="#7A67D1">
+    <!-- Three input slots -->
+    <rect x="12" y="14" width="14" height="4" rx="2" />
+    <rect x="12" y="30" width="14" height="4" rx="2" />
+    <rect x="12" y="46" width="14" height="4" rx="2" />
+    <!-- Center diamond -->
+    <polygon points="34,25 41,32 34,39 27,32" />
+    <!-- Output slot -->
+    <rect x="38" y="30" width="14" height="4" rx="2" />
+    <!-- Connecting lines -->
+    <rect x="24" y="15" width="3" height="2" transform="rotate(30, 25, 16)" />
+    <rect x="24" y="31" width="4" height="2" />
+    <rect x="24" y="47" width="3" height="2" transform="rotate(-30, 25, 48)" />
+  </g>
+</svg>

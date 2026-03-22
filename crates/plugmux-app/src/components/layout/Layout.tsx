@@ -1,4 +1,5 @@
 import { Sidebar } from "./Sidebar";
+import { Titlebar } from "./Titlebar";
 
 interface LayoutProps {
   activePage: string;
@@ -14,13 +15,16 @@ export function Layout({
   children,
 }: LayoutProps) {
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <Sidebar
-        activePage={activePage}
-        onNavigate={onNavigate}
-        onNewEnvironment={onNewEnvironment}
-      />
-      <main className="flex-1 overflow-auto">{children}</main>
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <Titlebar />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          activePage={activePage}
+          onNavigate={onNavigate}
+          onNewEnvironment={onNewEnvironment}
+        />
+        <main className="flex-1 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }

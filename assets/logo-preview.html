@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>plugmux logo preview</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      gap: 40px;
+    }
+    .bar {
+      background: #7A67D1;
+      padding: 10px 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .bar img {
+      height: 32px;
+    }
+    .full-width {
+      width: 800px;
+      border-radius: 10px 10px 0 0;
+      padding: 12px 20px;
+    }
+    .label {
+      color: #888;
+      font-family: system-ui;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="label">Logo</div>
+    <div class="bar">
+      <img src="logo-white.svg" />
+    </div>
+  </div>
+  <div>
+    <div class="label">As titlebar</div>
+    <div class="bar full-width">
+      <img src="logo-white.svg" />
+    </div>
+  </div>
+</body>
+</html>
