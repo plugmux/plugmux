@@ -1,16 +1,14 @@
 import {
   Layers,
   BookOpen,
-  LayoutTemplate,
+  LayoutDashboard,
   Settings,
   Plus,
-  Circle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/hooks/useConfig";
-import { useEngine } from "@/hooks/useEngine";
 
 interface SidebarProps {
   activePage: string;
@@ -24,46 +22,37 @@ export function Sidebar({
   onNewEnvironment,
 }: SidebarProps) {
   const { config } = useConfig();
-  const { status } = useEngine();
-
-  const statusColor =
-    status === "running"
-      ? "text-green-500"
-      : status === "conflict"
-        ? "text-yellow-500"
-        : "text-muted-foreground";
 
   return (
     <div className="flex h-full w-[220px] flex-col border-r bg-muted/30">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-4">
-        <Circle className={cn("h-3 w-3 fill-current", statusColor)} />
-        <span className="text-sm font-semibold">plugmux</span>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-1 px-2">
-        {/* Default environment — pinned at top */}
+      <nav className="flex flex-1 flex-col gap-1 px-2 pt-3">
         <button
-          onClick={() => onNavigate("env:default")}
+          onClick={() => onNavigate("dashboard")}
           className={cn(
-            "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
-            activePage === "env:default"
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            activePage === "dashboard"
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4" />
-            <span className="truncate">Default</span>
-          </div>
-          {/* Health dot — static green placeholder until engine integration */}
-          <span className="ml-1 h-2 w-2 rounded-full bg-green-500" />
+          <LayoutDashboard className="h-4 w-4" />
+          Dashboard
         </button>
-
-        {/* Environments section (excludes default) */}
+        <button
+          onClick={() => onNavigate("catalog")}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            activePage === "catalog"
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          )}
+        >
+          <BookOpen className="h-4 w-4" />
+          Catalog
+        </button>
+        {/* Environments section */}
         <div className="mt-4">
-          <div className="flex items-center justify-between px-2 pb-1">
+          <div className="flex items-center justify-between pl-2 pr-1 pb-1">
             <span className="text-xs font-medium uppercase text-muted-foreground">
               Environments
             </span>
@@ -77,6 +66,23 @@ export function Sidebar({
             </Button>
           </div>
 
+          {/* Default environment */}
+          <button
+            onClick={() => onNavigate("env:default")}
+            className={cn(
+              "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
+              activePage === "env:default"
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              <span className="truncate">Default</span>
+            </div>
+          </button>
+
+          {/* Other environments */}
           {config?.environments
             .filter((env) => env.id !== "default")
             .map((env) => {
@@ -97,44 +103,12 @@ export function Sidebar({
                     <Layers className="h-4 w-4" />
                     <span className="truncate">{env.name}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {/* Health dot — static green placeholder */}
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                      {serverCount}
-                    </Badge>
-                  </div>
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                    {serverCount}
+                  </Badge>
                 </button>
               );
             })}
-        </div>
-
-        {/* Phase 3 placeholders */}
-        <div className="mt-4 flex flex-col gap-1">
-          <button
-            onClick={() => onNavigate("catalog")}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-              activePage === "catalog"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            <BookOpen className="h-4 w-4" />
-            Catalog
-          </button>
-          <button
-            onClick={() => onNavigate("presets")}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-              activePage === "presets"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            <LayoutTemplate className="h-4 w-4" />
-            Presets
-          </button>
         </div>
 
         {/* Settings at bottom */}

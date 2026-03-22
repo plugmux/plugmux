@@ -12,5 +12,5 @@
   <!-- "plugmux" bold -->
   <text x="40" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="white" letter-spacing="0.5">plugmux</text>
   <!-- "desktop" thin -->
-  <text x="137" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="200" fill="white" letter-spacing="0.5">desktop</text>
+  <text x="143" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="200" fill="white" letter-spacing="0.5">desktop</text>
 </svg>

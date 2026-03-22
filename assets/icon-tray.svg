@@ -7,7 +7,7 @@
   <line x1="9" y1="5" x2="12" y2="12" />
   <line x1="9" y1="19" x2="12" y2="12" />
   <!-- Single output line -->
-  <line x1="12" y1="12" x2="22" y2="12" />
+  <line x1="12" y1="12" x2="20" y2="12" />
   <!-- Center node diamond -->
   <polygon points="12,8.5 15.5,12 12,15.5 8.5,12" fill="currentColor" stroke="currentColor" stroke-width="1.5" />
 </svg>
