@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 
+use plugmux_core::agents::{
+    AgentEntry, AgentRegistry, AgentSource, AgentState, AgentStateEntry, ConfigFormat,
+    DetectedAgent,
+};
 use plugmux_core::catalog::{CatalogEntry, Preset};
 use plugmux_core::config::{self, Config, Environment, Permissions, PermissionLevel};
 use plugmux_core::environment;
@@ -383,6 +387,162 @@ pub async fn get_server_health(
         .unwrap_or(HealthStatus::Unavailable {
             reason: "Server not running".to_string(),
         }))
+}
+
+// ---------------------------------------------------------------------------
+// Agent commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_agent_registry() -> Result<Vec<AgentEntry>, String> {
+    let registry = AgentRegistry::load_bundled();
+    Ok(registry.list_agents().into_iter().cloned().collect())
+}
+
+#[tauri::command]
+pub async fn detect_agents() -> Result<Vec<DetectedAgent>, String> {
+    let registry = AgentRegistry::load_bundled();
+    let config_dir = plugmux_core::config::config_dir();
+    let state = AgentState::load(&config_dir);
+    Ok(plugmux_core::agents::detect_all(&registry, &state))
+}
+
+#[tauri::command]
+pub async fn connect_agent_cmd(
+    engine: State<'_, Arc<Engine>>,
+    agent_id: String,
+) -> Result<Option<String>, String> {
+    let registry = AgentRegistry::load_bundled();
+    let config_dir = plugmux_core::config::config_dir();
+    let state = AgentState::load(&config_dir);
+    let port = *engine.port.read().await;
+
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &state, &agent_id)?;
+
+    let result =
+        plugmux_core::agents::connect_agent(&config_path, &config_format, &mcp_key, port)?;
+
+    Ok(result.map(|p| p.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+pub async fn disconnect_agent_cmd(agent_id: String, restore: bool) -> Result<(), String> {
+    let registry = AgentRegistry::load_bundled();
+    let config_dir = plugmux_core::config::config_dir();
+    let state = AgentState::load(&config_dir);
+
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &state, &agent_id)?;
+
+    if restore {
+        plugmux_core::agents::disconnect_and_restore(&config_path, &config_format, &mcp_key)
+    } else {
+        plugmux_core::agents::disconnect_agent(&config_path, &config_format, &mcp_key)
+    }
+}
+
+#[tauri::command]
+pub async fn has_agent_backup(agent_id: String) -> Result<bool, String> {
+    let registry = AgentRegistry::load_bundled();
+    let config_dir = plugmux_core::config::config_dir();
+    let state = AgentState::load(&config_dir);
+    let (config_path, _, _) = resolve_agent_config(&registry, &state, &agent_id)?;
+    Ok(plugmux_core::agents::get_backup_path(&config_path).is_some())
+}
+
+#[tauri::command]
+pub async fn add_agent_from_registry(
+    agent_id: String,
+    config_path: String,
+) -> Result<(), String> {
+    let config_dir = plugmux_core::config::config_dir();
+    let mut state = AgentState::load(&config_dir);
+    state.add_agent(AgentStateEntry {
+        id: agent_id,
+        source: AgentSource::Registry,
+        name: None,
+        config_path: Some(config_path),
+        config_format: None,
+        mcp_key: None,
+    });
+    state.save(&config_dir)
+}
+
+#[tauri::command]
+pub async fn add_custom_agent(
+    name: String,
+    config_path: String,
+    config_format: String,
+    mcp_key: String,
+) -> Result<(), String> {
+    let config_dir = plugmux_core::config::config_dir();
+    let mut state = AgentState::load(&config_dir);
+    let id = plugmux_core::slug::slugify(&name);
+    let format = match config_format.as_str() {
+        "toml" => ConfigFormat::Toml,
+        _ => ConfigFormat::Json,
+    };
+    state.add_agent(AgentStateEntry {
+        id,
+        source: AgentSource::Custom,
+        name: Some(name),
+        config_path: Some(config_path),
+        config_format: Some(format),
+        mcp_key: Some(mcp_key),
+    });
+    state.save(&config_dir)
+}
+
+#[tauri::command]
+pub async fn dismiss_agent(agent_id: String) -> Result<(), String> {
+    let config_dir = plugmux_core::config::config_dir();
+    let mut state = AgentState::load(&config_dir);
+    state.dismiss_agent(&agent_id);
+    state.save(&config_dir)
+}
+
+/// Resolves agent config details from registry or state.
+fn resolve_agent_config(
+    registry: &AgentRegistry,
+    state: &AgentState,
+    agent_id: &str,
+) -> Result<(std::path::PathBuf, ConfigFormat, String), String> {
+    // Try registry first
+    if let Some(entry) = registry.get_agent(agent_id) {
+        let path = registry
+            .resolve_config_path(entry)
+            .ok_or_else(|| format!("No config path for agent on this OS: {agent_id}"))?;
+        return Ok((path, entry.config_format.clone(), entry.mcp_key.clone()));
+    }
+
+    // Try state (custom/registry agents)
+    if let Some(state_entry) = state.get_agent(agent_id) {
+        let path_str = state_entry
+            .config_path
+            .as_ref()
+            .ok_or_else(|| format!("No config path for agent: {agent_id}"))?;
+        let path = std::path::PathBuf::from(
+            path_str.replace(
+                "~",
+                &dirs::home_dir()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+            ),
+        );
+        let format = state_entry
+            .config_format
+            .clone()
+            .unwrap_or(ConfigFormat::Json);
+        let mcp_key = state_entry
+            .mcp_key
+            .clone()
+            .unwrap_or_else(|| "mcpServers".to_string());
+        return Ok((path, format, mcp_key));
+    }
+
+    Err(format!("Agent not found: {agent_id}"))
 }
 
 // ---------------------------------------------------------------------------
