@@ -13,19 +13,19 @@ struct Cli {
 enum Commands {
     /// Start the plugmux gateway
     Start {
-        /// Port to listen on (default: 4242)
+        /// Port to listen on (overrides config, default: 4242)
         #[arg(short, long)]
         port: Option<u16>,
     },
     /// Check if the gateway is running and show stop instructions
     Stop {
-        /// Port to check (default: 4242)
+        /// Port to check (overrides config, default: 4242)
         #[arg(short, long)]
         port: Option<u16>,
     },
     /// Show gateway status
     Status {
-        /// Port to check (default: 4242)
+        /// Port to check (overrides config, default: 4242)
         #[arg(short, long)]
         port: Option<u16>,
     },
@@ -34,10 +34,20 @@ enum Commands {
         #[command(subcommand)]
         command: commands::env::EnvCommands,
     },
-    /// Manage servers
+    /// Manage servers within environments
     Server {
         #[command(subcommand)]
         command: commands::server::ServerCommands,
+    },
+    /// Manage custom servers
+    Custom {
+        #[command(subcommand)]
+        command: commands::custom::CustomCommands,
+    },
+    /// Browse the server catalog
+    Catalog {
+        #[command(subcommand)]
+        command: commands::catalog::CatalogCommands,
     },
     /// Manage configuration
     Config {
@@ -58,6 +68,8 @@ async fn main() {
         Commands::Status { port } => commands::status::run(*port).await,
         Commands::Env { command } => commands::env::run(command),
         Commands::Server { command } => commands::server::run(command),
+        Commands::Custom { command } => commands::custom::run(command),
+        Commands::Catalog { command } => commands::catalog::run(command),
         Commands::Config { command } => commands::config::run(command),
     };
 

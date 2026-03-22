@@ -1,22 +1,17 @@
 use clap::Subcommand;
-use std::path::PathBuf;
 
+use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
+use plugmux_core::migration;
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
     /// Show the config file path
     Path,
-    /// Export the config to a file
-    Export {
-        /// Output file path
-        path: PathBuf,
-    },
-    /// Import a config from a file
-    Import {
-        /// Input file path
-        path: PathBuf,
-    },
+    /// Show the current configuration
+    Show,
+    /// Migrate from Phase 2 config format to Phase 3
+    Migrate,
 }
 
 pub fn run(cmd: &ConfigCommands) -> Result<(), Box<dyn std::error::Error>> {
@@ -25,18 +20,23 @@ pub fn run(cmd: &ConfigCommands) -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", config::config_path().display());
         }
 
-        ConfigCommands::Export { path } => {
+        ConfigCommands::Show => {
             let cfg_path = config::config_path();
-            let cfg = config::load_or_default(&cfg_path)?;
-            config::save(path, &cfg)?;
-            println!("Config exported to: {}", path.display());
+            let cfg = config::load_or_default(&cfg_path);
+            let json = serde_json::to_string_pretty(&cfg)?;
+            println!("{json}");
         }
 
-        ConfigCommands::Import { path } => {
-            let cfg = config::load(path)?;
-            let cfg_path = config::config_path();
-            config::save(&cfg_path, &cfg)?;
-            println!("Config imported from: {}", path.display());
+        ConfigCommands::Migrate => {
+            if migration::needs_migration() {
+                let catalog = CatalogRegistry::load_bundled();
+                migration::migrate(&catalog)?;
+                println!("Migration complete.");
+                println!("  Old config backed up to: plugmux.json.backup");
+                println!("  New config: {}", config::config_path().display());
+            } else {
+                println!("No migration needed.");
+            }
         }
     }
 

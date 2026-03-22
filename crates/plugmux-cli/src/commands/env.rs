@@ -1,7 +1,8 @@
 use clap::Subcommand;
 
+use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
-use plugmux_core::environment::resolve_named;
+use plugmux_core::environment;
 use plugmux_core::slug::slugify;
 
 #[derive(Subcommand)]
@@ -12,7 +13,7 @@ pub enum EnvCommands {
     Create {
         /// Environment name
         name: String,
-        /// Use a preset configuration (copies servers from another environment)
+        /// Use a preset configuration (adds preset servers to the new environment)
         #[arg(long)]
         preset: Option<String>,
     },
@@ -21,16 +22,11 @@ pub enum EnvCommands {
         /// Environment ID (slug)
         id: String,
     },
-    /// Show the MCP endpoint URL for an environment
-    Url {
-        /// Environment ID (slug)
-        id: String,
-    },
 }
 
 pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
     let cfg_path = config::config_path();
-    let mut cfg = config::load_or_default(&cfg_path)?;
+    let mut cfg = config::load_or_default(&cfg_path);
 
     match cmd {
         EnvCommands::List => {
@@ -40,12 +36,12 @@ pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("Environments:");
                 for env in &cfg.environments {
-                    let server_count = resolve_named(&cfg, &env.id)
+                    let server_count = environment::get_server_ids(&cfg, &env.id)
                         .map(|s| s.len())
                         .unwrap_or(0);
                     println!(
-                        "  {} ({}) - {} servers - {}",
-                        env.name, env.id, server_count, env.endpoint
+                        "  {} ({}) - {} servers - http://localhost:{}/env/{}",
+                        env.name, env.id, server_count, cfg.port, env.id
                     );
                 }
             }
@@ -59,14 +55,13 @@ pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
                 return Err(format!("environment '{id}' already exists").into());
             }
 
-            // If a preset is given, copy servers from the preset environment
+            // If a preset is given, look it up from the catalog
             let preset_servers = if let Some(preset_id) = preset {
-                let preset_env = cfg
-                    .environments
-                    .iter()
-                    .find(|e| e.id == slugify(preset_id))
-                    .ok_or_else(|| format!("preset environment '{preset_id}' not found"))?;
-                preset_env.servers.clone()
+                let catalog = CatalogRegistry::load_bundled();
+                let preset_entry = catalog
+                    .get_preset(preset_id)
+                    .ok_or_else(|| format!("preset '{preset_id}' not found"))?;
+                preset_entry.servers.clone()
             } else {
                 Vec::new()
             };
@@ -76,22 +71,13 @@ pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
 
             config::save(&cfg_path, &cfg)?;
             println!("Created environment: {} ({})", name, id);
-            println!("  Endpoint: http://localhost:4242/env/{id}");
+            println!("  Endpoint: http://localhost:{}/env/{id}", cfg.port);
         }
 
         EnvCommands::Delete { id } => {
-            if config::remove_environment(&mut cfg, id) {
-                config::save(&cfg_path, &cfg)?;
-                println!("Deleted environment: {id}");
-            } else {
-                return Err(format!("environment '{id}' not found").into());
-            }
-        }
-
-        EnvCommands::Url { id } => {
-            let env = config::find_environment(&cfg, id)
-                .ok_or_else(|| format!("environment '{id}' not found"))?;
-            println!("{}", env.endpoint);
+            config::remove_environment(&mut cfg, id)?;
+            config::save(&cfg_path, &cfg)?;
+            println!("Deleted environment: {id}");
         }
     }
 
