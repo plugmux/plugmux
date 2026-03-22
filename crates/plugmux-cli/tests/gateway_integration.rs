@@ -8,9 +8,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 
-use plugmux_core::config::{
-    EnvironmentConfig, MainConfig, PlugmuxConfig,
-};
+use plugmux_core::config::{Config, Environment, Permissions, PermissionLevel};
 use plugmux_core::gateway::router::build_router;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::server::{Connectivity, ServerConfig, Transport};
@@ -33,37 +31,39 @@ async fn jsonrpc_request(client: &reqwest::Client, url: &str, body: Value) -> Va
 #[tokio::test]
 async fn test_full_gateway_flow() {
     // -----------------------------------------------------------------------
-    // 1. Build config with a mock server in Main and one environment
+    // 1. Build config with a "test-env" environment containing mock-echo
     // -----------------------------------------------------------------------
-    let config = PlugmuxConfig {
-        main: MainConfig {
-            servers: vec![ServerConfig {
-                id: "mock-echo".to_string(),
-                name: "Mock Echo".to_string(),
-                transport: Transport::Stdio,
-                command: Some(MOCK_SERVER_BIN.to_string()),
-                args: Some(vec![]),
-                url: None,
-                connectivity: Connectivity::Local,
-                enabled: true,
-                description: Some("Mock echo server for testing".to_string()),
-            }],
+    let config = Config {
+        port: 4242,
+        permissions: Permissions {
+            enable_server: PermissionLevel::Allow,
+            disable_server: PermissionLevel::Allow,
         },
-        environments: vec![EnvironmentConfig {
-            id: "main".to_string(),
-            name: "Main".to_string(),
-            endpoint: "http://localhost:0/env/main".to_string(),
-            servers: vec![],
-            overrides: vec![],
+        environments: vec![Environment {
+            id: "test-env".to_string(),
+            name: "Test Environment".to_string(),
+            servers: vec!["mock-echo".to_string()],
         }],
     };
 
     // -----------------------------------------------------------------------
-    // 2. Create ServerManager and start the mock server
+    // 2. Create ServerManager and start the mock server manually
+    //    (mock-echo is not in the catalog, so we start it via ServerManager)
     // -----------------------------------------------------------------------
+    let mock_server_config = ServerConfig {
+        id: "mock-echo".to_string(),
+        name: "Mock Echo".to_string(),
+        transport: Transport::Stdio,
+        command: Some(MOCK_SERVER_BIN.to_string()),
+        args: Some(vec![]),
+        url: None,
+        connectivity: Connectivity::Local,
+        description: Some("Mock echo server for testing".to_string()),
+    };
+
     let manager = Arc::new(ServerManager::new());
     manager
-        .start_server(config.main.servers[0].clone())
+        .start_server(mock_server_config)
         .await
         .expect("failed to start mock server");
 
@@ -87,7 +87,7 @@ async fn test_full_gateway_flow() {
     });
 
     let client = reqwest::Client::new();
-    let env_url = format!("{base_url}/env/main");
+    let env_url = format!("{base_url}/env/test-env");
 
     // -----------------------------------------------------------------------
     // 4. Test: initialize
@@ -111,7 +111,7 @@ async fn test_full_gateway_flow() {
     assert_eq!(server_info["version"], "0.1.0");
 
     // -----------------------------------------------------------------------
-    // 5. Test: tools/list — should return 5 gateway tools
+    // 5. Test: tools/list — should return 6 gateway tools
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
@@ -128,7 +128,7 @@ async fn test_full_gateway_flow() {
     let tools = resp["result"]["tools"]
         .as_array()
         .expect("tools should be an array");
-    assert_eq!(tools.len(), 5, "gateway should expose 5 tools");
+    assert_eq!(tools.len(), 6, "gateway should expose 6 tools");
 
     let tool_names: Vec<&str> = tools
         .iter()
@@ -139,6 +139,27 @@ async fn test_full_gateway_flow() {
     assert!(tool_names.contains(&"execute"));
     assert!(tool_names.contains(&"enable_server"));
     assert!(tool_names.contains(&"disable_server"));
+    assert!(tool_names.contains(&"confirm_action"));
+
+    // Verify updated descriptions for enable_server and disable_server
+    let enable_tool = tools.iter().find(|t| t["name"] == "enable_server").unwrap();
+    assert!(
+        enable_tool["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Add a server"),
+        "enable_server description should say 'Add a server': {}",
+        enable_tool["description"]
+    );
+    let disable_tool = tools.iter().find(|t| t["name"] == "disable_server").unwrap();
+    assert!(
+        disable_tool["description"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Remove a server"),
+        "disable_server description should say 'Remove a server': {}",
+        disable_tool["description"]
+    );
 
     // -----------------------------------------------------------------------
     // 6. Test: tools/call list_servers — mock server should be listed
@@ -166,7 +187,8 @@ async fn test_full_gateway_flow() {
         serde_json::from_str(content_text).expect("should be valid JSON array");
     assert_eq!(servers.len(), 1, "should have exactly one server");
     assert_eq!(servers[0]["id"], "mock-echo");
-    assert_eq!(servers[0]["name"], "Mock Echo");
+    // In the new model, name is derived from the id (manager doesn't expose config metadata)
+    assert_eq!(servers[0]["name"], "mock-echo");
     assert_eq!(servers[0]["healthy"], true);
     assert!(
         servers[0]["tool_count"].as_u64().unwrap() >= 1,
