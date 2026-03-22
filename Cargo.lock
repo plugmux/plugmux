@@ -2907,6 +2907,8 @@ name = "plugmux-app"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "dirs 6.0.0",
  "notify",
  "plugmux-core",
  "serde",
@@ -2915,6 +2917,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
  "uuid",
@@ -2942,6 +2945,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "chrono",
  "dirs 6.0.0",
  "rmcp",
  "serde",
@@ -2950,6 +2954,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "uuid",
 ]
