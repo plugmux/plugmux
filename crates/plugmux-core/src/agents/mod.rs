@@ -3,3 +3,6 @@ pub use registry::*;
 
 mod state;
 pub use state::*;
+
+mod detect;
+pub use detect::*;
