@@ -150,3 +150,63 @@ export const getServerHealth = (serverId: string) =>
 // ---------------------------------------------------------------------------
 
 export const migrateConfig = () => invoke<void>("migrate_config");
+
+// ---------------------------------------------------------------------------
+// Agent types
+// ---------------------------------------------------------------------------
+
+export interface AgentEntry {
+  id: string;
+  name: string;
+  icon: string | null;
+  config_format: "json" | "toml";
+  mcp_key: string;
+  tier: "auto" | "manual";
+  config_paths: {
+    macos: string | null;
+    linux: string | null;
+    windows: string | null;
+  } | null;
+}
+
+export interface DetectedAgent {
+  id: string;
+  name: string;
+  icon: string | null;
+  config_path: string | null;
+  installed: boolean;
+  status: "green" | "yellow" | "gray";
+  source: string;
+}
+
+// ---------------------------------------------------------------------------
+// Agent commands
+// ---------------------------------------------------------------------------
+
+export const getAgentRegistry = () =>
+  invoke<AgentEntry[]>("get_agent_registry");
+
+export const detectAgents = () =>
+  invoke<DetectedAgent[]>("detect_agents");
+
+export const connectAgent = (agentId: string) =>
+  invoke<string | null>("connect_agent_cmd", { agentId });
+
+export const disconnectAgent = (agentId: string, restore: boolean) =>
+  invoke<void>("disconnect_agent_cmd", { agentId, restore });
+
+export const hasAgentBackup = (agentId: string) =>
+  invoke<boolean>("has_agent_backup", { agentId });
+
+export const addAgentFromRegistry = (agentId: string, configPath: string) =>
+  invoke<void>("add_agent_from_registry", { agentId, configPath });
+
+export const addCustomAgent = (
+  name: string,
+  configPath: string,
+  configFormat: string,
+  mcpKey: string,
+) => invoke<void>("add_custom_agent", { name, configPath, configFormat, mcpKey });
+
+export const dismissAgent = (agentId: string) =>
+  invoke<void>("dismiss_agent", { agentId });
