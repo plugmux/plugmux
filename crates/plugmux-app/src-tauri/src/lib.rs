@@ -6,7 +6,7 @@ mod watcher;
 
 use engine::Engine;
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub fn run() {
     tracing_subscriber::fmt::init();
@@ -57,6 +57,22 @@ pub fn run() {
             None,
         ))
         .setup(move |app| {
+            // Create main window programmatically so we can set traffic light position
+            let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("plugmux")
+                .inner_size(900.0, 600.0)
+                .min_inner_size(700.0, 400.0)
+                .resizable(true)
+                .hidden_title(true)
+                .title_bar_style(tauri::TitleBarStyle::Overlay);
+
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder.traffic_light_position(tauri::LogicalPosition::new(12.0, 25.0));
+            }
+
+            let window = builder.build()?;
+
             tray::setup_tray(app.handle())?;
 
             let engine = engine.clone();
@@ -87,7 +103,7 @@ pub fn run() {
             });
 
             // Hide window on close instead of quitting (tray keeps running)
-            if let Some(window) = app.get_webview_window("main") {
+            {
                 let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {

@@ -10,18 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "plugmux",
-        "width": 900,
-        "height": 600,
-        "resizable": true,
-        "minWidth": 700,
-        "minHeight": 400,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
