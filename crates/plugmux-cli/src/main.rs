@@ -49,6 +49,11 @@ enum Commands {
         #[command(subcommand)]
         command: commands::catalog::CatalogCommands,
     },
+    /// Manage code agents
+    Agents {
+        #[command(subcommand)]
+        command: commands::agents::AgentCommands,
+    },
     /// Manage configuration
     Config {
         #[command(subcommand)]
@@ -70,6 +75,7 @@ async fn main() {
         Commands::Server { command } => commands::server::run(command),
         Commands::Custom { command } => commands::custom::run(command),
         Commands::Catalog { command } => commands::catalog::run(command),
+        Commands::Agents { command } => commands::agents::run(command),
         Commands::Config { command } => commands::config::run(command),
     };
 
