@@ -1,5 +1,4 @@
 import {
-  Server,
   Layers,
   BookOpen,
   LayoutTemplate,
@@ -44,21 +43,25 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-1 px-2">
-        {/* Main */}
+        {/* Default environment — pinned at top */}
         <button
-          onClick={() => onNavigate("main")}
+          onClick={() => onNavigate("env:default")}
           className={cn(
-            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-            activePage === "main"
+            "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
+            activePage === "env:default"
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
-          <Server className="h-4 w-4" />
-          Main
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            <span className="truncate">Default</span>
+          </div>
+          {/* Health dot — static green placeholder until engine integration */}
+          <span className="ml-1 h-2 w-2 rounded-full bg-green-500" />
         </button>
 
-        {/* Environments section */}
+        {/* Environments section (excludes default) */}
         <div className="mt-4">
           <div className="flex items-center justify-between px-2 pb-1">
             <span className="text-xs font-medium uppercase text-muted-foreground">
@@ -74,30 +77,36 @@ export function Sidebar({
             </Button>
           </div>
 
-          {config?.environments.map((env) => {
-            const page = `env:${env.id}`;
-            const serverCount = env.servers.length;
-            return (
-              <button
-                key={env.id}
-                onClick={() => onNavigate(page)}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
-                  activePage === page
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4" />
-                  <span className="truncate">{env.name}</span>
-                </div>
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                  {serverCount}
-                </Badge>
-              </button>
-            );
-          })}
+          {config?.environments
+            .filter((env) => env.id !== "default")
+            .map((env) => {
+              const page = `env:${env.id}`;
+              const serverCount = env.servers.length;
+              return (
+                <button
+                  key={env.id}
+                  onClick={() => onNavigate(page)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
+                    activePage === page
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4" />
+                    <span className="truncate">{env.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {/* Health dot — static green placeholder */}
+                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      {serverCount}
+                    </Badge>
+                  </div>
+                </button>
+              );
+            })}
         </div>
 
         {/* Phase 3 placeholders */}

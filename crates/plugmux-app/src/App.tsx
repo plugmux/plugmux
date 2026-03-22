@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout/Layout";
-import { MainPage } from "@/pages/MainPage";
 import { EnvironmentPage } from "@/pages/EnvironmentPage";
 import { CatalogPage } from "@/pages/CatalogPage";
 import { PresetsPage } from "@/pages/PresetsPage";
@@ -8,7 +7,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { CreateEnvironmentDialog } from "@/components/environments/CreateEnvironmentDialog";
 
 function App() {
-  const [activePage, setActivePage] = useState("main");
+  const [activePage, setActivePage] = useState("env:default");
   const [newEnvOpen, setNewEnvOpen] = useState(false);
 
   function renderPage() {
@@ -18,8 +17,6 @@ function App() {
     }
 
     switch (activePage) {
-      case "main":
-        return <MainPage />;
       case "catalog":
         return <CatalogPage />;
       case "presets":
@@ -27,7 +24,7 @@ function App() {
       case "settings":
         return <SettingsPage />;
       default:
-        return <MainPage />;
+        return <EnvironmentPage envId="default" />;
     }
   }
 
