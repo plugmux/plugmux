@@ -1,7 +1,7 @@
 import {
   Layers,
   BookOpen,
-  LayoutDashboard,
+  Cable,
   Settings,
   Plus,
 } from "lucide-react";
@@ -27,16 +27,16 @@ export function Sidebar({
     <div className="flex h-full w-[220px] flex-col border-r bg-muted/30">
       <nav className="flex flex-1 flex-col gap-1 px-2 pt-3">
         <button
-          onClick={() => onNavigate("dashboard")}
+          onClick={() => onNavigate("agents")}
           className={cn(
             "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-            activePage === "dashboard"
+            activePage === "agents"
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
-          <LayoutDashboard className="h-4 w-4" />
-          Dashboard
+          <Cable className="h-4 w-4" />
+          Agents
         </button>
         <button
           onClick={() => onNavigate("catalog")}

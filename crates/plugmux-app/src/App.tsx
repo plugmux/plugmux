@@ -4,11 +4,11 @@ import { EnvironmentPage } from "@/pages/EnvironmentPage";
 import { CatalogPage } from "@/pages/CatalogPage";
 import { PresetsPage } from "@/pages/PresetsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { DashboardPage } from "@/pages/DashboardPage";
+import { AgentsPage } from "@/pages/AgentsPage";
 import { CreateEnvironmentDialog } from "@/components/environments/CreateEnvironmentDialog";
 
 function App() {
-  const [activePage, setActivePage] = useState("dashboard");
+  const [activePage, setActivePage] = useState("agents");
   const [newEnvOpen, setNewEnvOpen] = useState(false);
 
   function renderPage() {
@@ -18,8 +18,8 @@ function App() {
     }
 
     switch (activePage) {
-      case "dashboard":
-        return <DashboardPage />;
+      case "agents":
+        return <AgentsPage />;
       case "catalog":
         return <CatalogPage />;
       case "presets":

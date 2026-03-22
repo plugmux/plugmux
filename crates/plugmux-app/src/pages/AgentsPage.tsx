@@ -4,16 +4,18 @@ import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
 import { DisableDialog } from "@/components/agents/DisableDialog";
+import { SetupDialog } from "@/components/agents/SetupDialog";
+import { AddAgentDialog } from "@/components/agents/AddAgentDialog";
 import { useAgents } from "@/hooks/useAgents";
 import { hasAgentBackup, type DetectedAgent } from "@/lib/commands";
 
 export function AgentsPage() {
-  const { agents, loading, hasConnected, connect, disconnect, dismiss } =
+  const { agents, loading, hasConnected, connect, disconnect, dismiss, reload } =
     useAgents();
 
-  // Setup & AddAgent dialog placeholders (Tasks 12 & 13)
-  const [_setupOpen, setSetupOpen] = useState(false);
-  const [_addAgentOpen, setAddAgentOpen] = useState(false);
+  // Setup & AddAgent dialogs
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [addAgentOpen, setAddAgentOpen] = useState(false);
 
   // Disable dialog state
   const [disableAgent, setDisableAgent] = useState<DetectedAgent | null>(null);
@@ -117,9 +119,20 @@ export function AgentsPage() {
         hasBackup={hasBackup}
       />
 
-      {/* Placeholder for Setup and AddAgent dialogs */}
-      {/* <SetupDialog open={setupOpen} onOpenChange={setSetupOpen} /> */}
-      {/* <AddAgentDialog open={addAgentOpen} onOpenChange={setAddAgentOpen} /> */}
+      {/* Setup dialog */}
+      <SetupDialog
+        open={setupOpen}
+        onOpenChange={setSetupOpen}
+        onComplete={reload}
+      />
+
+      {/* Add agent dialog */}
+      <AddAgentDialog
+        open={addAgentOpen}
+        onOpenChange={setAddAgentOpen}
+        existingAgentIds={agents.map((a) => a.id)}
+        onAdded={reload}
+      />
     </div>
   );
 }
