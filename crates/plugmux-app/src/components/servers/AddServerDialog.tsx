@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ interface AddServerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (server: ServerConfig) => void;
+  initialValues?: Partial<ServerConfig>;
 }
 
 const initialForm = {
@@ -38,8 +39,39 @@ export function AddServerDialog({
   open,
   onOpenChange,
   onAdd,
+  initialValues,
 }: AddServerDialogProps) {
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(() =>
+    initialValues
+      ? {
+          id: initialValues.id ?? "",
+          name: initialValues.name ?? "",
+          transport: initialValues.transport ?? ("stdio" as "stdio" | "http"),
+          command: initialValues.command ?? "",
+          url: initialValues.url ?? "",
+          connectivity: initialValues.connectivity ?? ("local" as "local" | "online"),
+        }
+      : initialForm,
+  );
+
+  // Sync form when initialValues changes (e.g. switching edit targets)
+  useEffect(() => {
+    if (open) {
+      setForm(
+        initialValues
+          ? {
+              id: initialValues.id ?? "",
+              name: initialValues.name ?? "",
+              transport: initialValues.transport ?? ("stdio" as "stdio" | "http"),
+              command: initialValues.command ?? "",
+              url: initialValues.url ?? "",
+              connectivity:
+                initialValues.connectivity ?? ("local" as "local" | "online"),
+            }
+          : initialForm,
+      );
+    }
+  }, [open, initialValues]);
 
   function reset() {
     setForm(initialForm);
@@ -71,9 +103,13 @@ export function AddServerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Custom Server</DialogTitle>
+          <DialogTitle>
+            {initialValues ? "Edit Custom Server" : "Add Custom Server"}
+          </DialogTitle>
           <DialogDescription>
-            Define a custom MCP server that is not in the catalog.
+            {initialValues
+              ? "Update the configuration for this custom MCP server."
+              : "Define a custom MCP server that is not in the catalog."}
           </DialogDescription>
         </DialogHeader>
 
@@ -167,7 +203,9 @@ export function AddServerDialog({
             >
               Cancel
             </Button>
-            <Button type="submit">Add Server</Button>
+            <Button type="submit">
+              {initialValues ? "Save Changes" : "Add Server"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

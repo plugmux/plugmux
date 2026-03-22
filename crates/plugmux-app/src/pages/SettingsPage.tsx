@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useEngine } from "@/hooks/useEngine";
+import { useConfig } from "@/hooks/useConfig";
 import { getPort, setPort } from "@/lib/commands";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { PermissionsSection } from "@/components/settings/PermissionsSection";
+import { CustomServersSection } from "@/components/settings/CustomServersSection";
 
 export function SettingsPage() {
   const { status, toggle } = useEngine();
+  const { config } = useConfig();
 
   // Port
   const [port, setPortValue] = useState<number>(0);
@@ -94,6 +98,16 @@ export function SettingsPage() {
 
       <Separator className="my-6" />
 
+      {/* Permissions */}
+      <PermissionsSection permissions={config?.permissions} />
+
+      <Separator className="my-6" />
+
+      {/* Custom Servers */}
+      <CustomServersSection />
+
+      <Separator className="my-6" />
+
       {/* Startup */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Startup</h2>
@@ -127,12 +141,8 @@ export function SettingsPage() {
       {/* About */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">About</h2>
-        <p className="text-sm text-muted-foreground">
-          plugmux v0.1.0
-        </p>
-        <p className="text-sm text-muted-foreground">
-          MIT License
-        </p>
+        <p className="text-sm text-muted-foreground">plugmux v0.1.0</p>
+        <p className="text-sm text-muted-foreground">MIT License</p>
       </section>
     </div>
   );
