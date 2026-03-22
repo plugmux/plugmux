@@ -1,0 +1,290 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "icon": "claudecode",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.claude/settings.json",
+        "linux": "~/.claude/settings.json",
+        "windows": "%USERPROFILE%\\.claude\\settings.json"
+      }
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "icon": "cursor",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.cursor/mcp.json",
+        "linux": "~/.cursor/mcp.json",
+        "windows": "%USERPROFILE%\\.cursor\\mcp.json"
+      }
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "icon": "windsurf",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.codeium/windsurf/mcp_config.json",
+        "linux": "~/.codeium/windsurf/mcp_config.json",
+        "windows": "%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json"
+      }
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "icon": "codex",
+      "config_format": "toml",
+      "mcp_key": "mcp_servers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.codex/config.toml",
+        "linux": "~/.codex/config.toml",
+        "windows": "%USERPROFILE%\\.codex\\config.toml"
+      }
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI",
+      "icon": "gemini",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.gemini/settings.json",
+        "linux": "~/.gemini/settings.json",
+        "windows": "%USERPROFILE%\\.gemini\\settings.json"
+      }
+    },
+    {
+      "id": "antigravity",
+      "name": "Antigravity",
+      "icon": "antigravity",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.gemini/antigravity/mcp_config.json",
+        "linux": "~/.gemini/antigravity/mcp_config.json",
+        "windows": "%USERPROFILE%\\.gemini\\antigravity\\mcp_config.json"
+      }
+    },
+    {
+      "id": "vscode",
+      "name": "VS Code",
+      "icon": "copilot",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.vscode/mcp.json",
+        "linux": "~/.vscode/mcp.json",
+        "windows": "%USERPROFILE%\\.vscode\\mcp.json"
+      }
+    },
+    {
+      "id": "copilot-cli",
+      "name": "GitHub Copilot CLI",
+      "icon": "githubcopilot",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.copilot/mcp-config.json",
+        "linux": "~/.copilot/mcp-config.json",
+        "windows": "%USERPROFILE%\\.copilot\\mcp-config.json"
+      }
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "icon": null,
+      "config_format": "json",
+      "mcp_key": "context_servers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.config/zed/settings.json",
+        "linux": "~/.config/zed/settings.json",
+        "windows": null
+      }
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "icon": "cline",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        "windows": "%APPDATA%\\Code\\User\\globalStorage\\saoudrizwan.claude-dev\\settings\\cline_mcp_settings.json"
+      }
+    },
+    {
+      "id": "roocode",
+      "name": "Roo Code",
+      "icon": "roocode",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json",
+        "linux": "~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json",
+        "windows": "%APPDATA%\\Code\\User\\globalStorage\\rooveterinaryinc.roo-cline\\settings\\mcp_settings.json"
+      }
+    },
+    {
+      "id": "continue",
+      "name": "Continue",
+      "icon": null,
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.continue/config.json",
+        "linux": "~/.continue/config.json",
+        "windows": "%USERPROFILE%\\.continue\\config.json"
+      }
+    },
+    {
+      "id": "goose",
+      "name": "Goose",
+      "icon": "goose",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.config/goose/config.json",
+        "linux": "~/.config/goose/config.json",
+        "windows": "%APPDATA%\\goose\\config.json"
+      }
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "icon": "opencode",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.config/opencode/config.json",
+        "linux": "~/.config/opencode/config.json",
+        "windows": "%APPDATA%\\opencode\\config.json"
+      }
+    },
+    {
+      "id": "trae",
+      "name": "Trae",
+      "icon": "trae",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.trae/mcp.json",
+        "linux": "~/.trae/mcp.json",
+        "windows": "%USERPROFILE%\\.trae\\mcp.json"
+      }
+    },
+    {
+      "id": "cherrystudio",
+      "name": "Cherry Studio",
+      "icon": "cherrystudio",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "lmstudio",
+      "name": "LM Studio",
+      "icon": "lmstudio",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "openwebui",
+      "name": "Open WebUI",
+      "icon": "openwebui",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "n8n",
+      "name": "n8n",
+      "icon": "n8n",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "dify",
+      "name": "Dify",
+      "icon": "dify",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "coze",
+      "name": "Coze",
+      "icon": "coze",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "openhands",
+      "name": "OpenHands",
+      "icon": "openhands",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "poe",
+      "name": "Poe",
+      "icon": "poe",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "jetbrains",
+      "name": "JetBrains",
+      "icon": "junie",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "monica",
+      "name": "Monica",
+      "icon": "monica",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    }
+  ]
+}
