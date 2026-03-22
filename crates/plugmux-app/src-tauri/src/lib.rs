@@ -16,26 +16,41 @@ pub fn run() {
     tauri::Builder::default()
         .manage(engine.clone())
         .invoke_handler(tauri::generate_handler![
+            // Engine
             commands::get_engine_status,
             commands::start_engine,
             commands::stop_engine,
+            // Config
             commands::get_config,
-            commands::get_main_servers,
-            commands::add_main_server,
-            commands::remove_main_server,
-            commands::toggle_main_server,
-            commands::rename_server,
+            commands::get_port,
+            commands::set_port,
+            // Permissions (global)
+            commands::get_permissions,
+            commands::set_permission,
+            // Environments
             commands::list_environments,
             commands::create_environment,
             commands::delete_environment,
             commands::rename_environment,
-            commands::add_env_server,
-            commands::remove_env_server,
-            commands::toggle_env_override,
-            commands::get_permissions,
-            commands::set_permission,
-            commands::get_port,
-            commands::set_port,
+            // Servers in environments
+            commands::add_server_to_env,
+            commands::remove_server_from_env,
+            // Custom servers
+            commands::list_custom_servers,
+            commands::add_custom_server,
+            commands::update_custom_server,
+            commands::remove_custom_server,
+            // Catalog (read-only, bundled)
+            commands::list_catalog_servers,
+            commands::search_catalog,
+            commands::get_catalog_entry,
+            // Presets (read-only, bundled)
+            commands::list_presets,
+            commands::create_env_from_preset,
+            // Health
+            commands::get_server_health,
+            // Migration
+            commands::migrate_config,
         ])
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
