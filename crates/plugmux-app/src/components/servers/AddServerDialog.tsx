@@ -54,7 +54,6 @@ export function AddServerDialog({
       name: form.name.trim() || form.id.trim(),
       transport: form.transport,
       connectivity: form.connectivity,
-      enabled: true,
       ...(form.transport === "stdio" && form.command.trim()
         ? { command: form.command.trim() }
         : {}),

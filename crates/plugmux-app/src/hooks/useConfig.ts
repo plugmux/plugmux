@@ -1,20 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getConfig,
-  addMainServer,
-  removeMainServer,
-  toggleMainServer,
   createEnvironment,
   deleteEnvironment,
-  addEnvServer,
-  removeEnvServer,
-  toggleEnvOverride,
+  renameEnvironment,
+  addServerToEnv,
+  removeServerFromEnv,
 } from "@/lib/commands";
-import type { PlugmuxConfig, ServerConfig } from "@/lib/commands";
+import type { Config, Environment } from "@/lib/commands";
 import { useEvents } from "./useEvents";
 
 export function useConfig() {
-  const [config, setConfig] = useState<PlugmuxConfig | null>(null);
+  const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
@@ -29,7 +26,6 @@ export function useConfig() {
 
   useEvents("server_added", reload);
   useEvents("server_removed", reload);
-  useEvents("server_toggled", reload);
   useEvents("environment_created", reload);
   useEvents("environment_deleted", reload);
   useEvents("config_reloaded", reload);
@@ -38,29 +34,26 @@ export function useConfig() {
     config,
     loading,
     reload,
-    addMainServer: async (server: ServerConfig) => {
-      await addMainServer(server);
-    },
-    removeMainServer: async (id: string) => {
-      await removeMainServer(id);
-    },
-    toggleMainServer: async (id: string) => {
-      await toggleMainServer(id);
-    },
-    createEnvironment: async (name: string) => {
+    createEnvironment: async (name: string): Promise<Environment> => {
       return await createEnvironment(name);
     },
-    deleteEnvironment: async (id: string) => {
+    deleteEnvironment: async (id: string): Promise<void> => {
       await deleteEnvironment(id);
     },
-    addEnvServer: async (envId: string, server: ServerConfig) => {
-      await addEnvServer(envId, server);
+    renameEnvironment: async (id: string, name: string): Promise<void> => {
+      await renameEnvironment(id, name);
     },
-    removeEnvServer: async (envId: string, serverId: string) => {
-      await removeEnvServer(envId, serverId);
+    addServerToEnv: async (
+      envId: string,
+      serverId: string,
+    ): Promise<void> => {
+      await addServerToEnv(envId, serverId);
     },
-    toggleEnvOverride: async (envId: string, serverId: string) => {
-      await toggleEnvOverride(envId, serverId);
+    removeServerFromEnv: async (
+      envId: string,
+      serverId: string,
+    ): Promise<void> => {
+      await removeServerFromEnv(envId, serverId);
     },
   };
 }

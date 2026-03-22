@@ -7,22 +7,23 @@ import type { ServerConfig } from "@/lib/commands";
 
 interface ServerCardProps {
   server: ServerConfig;
+  enabled?: boolean;
   onToggle: () => void;
   onRemove: () => void;
 }
 
-export function ServerCard({ server, onToggle, onRemove }: ServerCardProps) {
+export function ServerCard({ server, enabled = true, onToggle, onRemove }: ServerCardProps) {
   return (
     <div
       className={cn(
         "flex items-center gap-3 rounded-lg border px-4 py-3 transition-opacity",
-        !server.enabled && "opacity-50",
+        !enabled && "opacity-50",
       )}
     >
       <Circle
         className={cn(
           "h-3 w-3 shrink-0 fill-current",
-          server.enabled ? "text-green-500" : "text-muted-foreground",
+          enabled ? "text-green-500" : "text-muted-foreground",
         )}
       />
 
@@ -48,7 +49,7 @@ export function ServerCard({ server, onToggle, onRemove }: ServerCardProps) {
       )}
 
       <div className="flex shrink-0 items-center gap-2">
-        <Switch checked={server.enabled} onCheckedChange={onToggle} />
+        <Switch checked={enabled} onCheckedChange={onToggle} />
         <Button
           variant="ghost"
           size="icon"

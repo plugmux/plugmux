@@ -2,7 +2,12 @@ import { Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import type { ServerConfig, ServerOverride } from "@/lib/commands";
+import type { ServerConfig } from "@/lib/commands";
+
+interface ServerOverride {
+  server_id: string;
+  enabled?: boolean;
+}
 
 interface InheritedServersProps {
   servers: ServerConfig[];
@@ -46,7 +51,7 @@ export function InheritedServers({
                 <Circle
                   className={cn(
                     "h-3 w-3 shrink-0 fill-current",
-                    server.enabled && !overridden
+                    !overridden
                       ? "text-green-500"
                       : "text-muted-foreground",
                   )}
