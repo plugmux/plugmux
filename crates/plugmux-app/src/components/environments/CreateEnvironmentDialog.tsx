@@ -10,7 +10,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConfig } from "@/hooks/useConfig";
+import { useCatalog } from "@/hooks/useCatalog";
+import { createEnvFromPreset } from "@/lib/commands";
 
 interface CreateEnvironmentDialogProps {
   open: boolean;
@@ -24,17 +33,30 @@ export function CreateEnvironmentDialog({
   onCreated,
 }: CreateEnvironmentDialogProps) {
   const [name, setName] = useState("");
+  const [presetId, setPresetId] = useState<string>("empty");
   const { createEnvironment } = useConfig();
+  const { presets } = useCatalog();
 
   async function handleCreate() {
     const trimmed = name.trim();
     if (!trimmed) return;
 
-    const env = await createEnvironment(trimmed);
-    setName("");
-    onOpenChange(false);
-    if (env) {
-      onCreated(env.id);
+    if (presetId && presetId !== "empty") {
+      const env = await createEnvFromPreset(presetId, trimmed);
+      setName("");
+      setPresetId("empty");
+      onOpenChange(false);
+      if (env) {
+        onCreated(env.id);
+      }
+    } else {
+      const env = await createEnvironment(trimmed);
+      setName("");
+      setPresetId("empty");
+      onOpenChange(false);
+      if (env) {
+        onCreated(env.id);
+      }
     }
   }
 
@@ -51,7 +73,7 @@ export function CreateEnvironmentDialog({
         <DialogHeader>
           <DialogTitle>Create Environment</DialogTitle>
           <DialogDescription>
-            Create a new environment that inherits servers from Main.
+            Create a new environment, optionally from a preset template.
           </DialogDescription>
         </DialogHeader>
 
@@ -66,6 +88,23 @@ export function CreateEnvironmentDialog({
               onKeyDown={handleKeyDown}
               autoFocus
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Template</Label>
+            <Select value={presetId} onValueChange={setPresetId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Empty (no servers)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="empty">Empty (no servers)</SelectItem>
+                {presets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

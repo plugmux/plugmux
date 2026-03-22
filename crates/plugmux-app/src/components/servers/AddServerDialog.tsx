@@ -71,9 +71,9 @@ export function AddServerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Server</DialogTitle>
+          <DialogTitle>Add Custom Server</DialogTitle>
           <DialogDescription>
-            Add a new MCP server to the main configuration.
+            Define a custom MCP server that is not in the catalog.
           </DialogDescription>
         </DialogHeader>
 

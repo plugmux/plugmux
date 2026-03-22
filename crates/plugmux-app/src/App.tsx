@@ -13,18 +13,18 @@ function App() {
   function renderPage() {
     if (activePage.startsWith("env:")) {
       const envId = activePage.slice(4);
-      return <EnvironmentPage envId={envId} />;
+      return <EnvironmentPage envId={envId} onNavigate={setActivePage} />;
     }
 
     switch (activePage) {
       case "catalog":
         return <CatalogPage />;
       case "presets":
-        return <PresetsPage />;
+        return <PresetsPage onNavigate={setActivePage} />;
       case "settings":
         return <SettingsPage />;
       default:
-        return <EnvironmentPage envId="default" />;
+        return <EnvironmentPage envId="default" onNavigate={setActivePage} />;
     }
   }
 
