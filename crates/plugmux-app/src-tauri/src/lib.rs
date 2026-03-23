@@ -73,13 +73,14 @@ pub fn run() {
                 .title("plugmux")
                 .inner_size(900.0, 600.0)
                 .min_inner_size(700.0, 400.0)
-                .resizable(true)
-                .hidden_title(true)
-                .title_bar_style(tauri::TitleBarStyle::Overlay);
+                .resizable(true);
 
             #[cfg(target_os = "macos")]
             {
-                builder = builder.traffic_light_position(tauri::LogicalPosition::new(12.0, 27.0));
+                builder = builder
+                    .hidden_title(true)
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .traffic_light_position(tauri::LogicalPosition::new(12.0, 27.0));
             }
 
             let window = builder.build()?;

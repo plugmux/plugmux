@@ -3,13 +3,16 @@ import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
 import { AddAgentDialog } from "@/components/agents/AddAgentDialog";
+import { ManualSetupDialog } from "@/components/agents/ManualSetupDialog";
 import { useAgents } from "@/hooks/useAgents";
+import type { DetectedAgent } from "@/lib/commands";
 
 export function AgentsPage() {
   const { agents, loading, connect, disconnect, dismiss, reload } =
     useAgents();
 
   const [addAgentOpen, setAddAgentOpen] = useState(false);
+  const [manualAgent, setManualAgent] = useState<DetectedAgent | null>(null);
 
   function handleConnect(id: string) {
     connect(id);
@@ -62,6 +65,7 @@ export function AgentsPage() {
         onConnect={handleConnect}
         onDisable={handleDisable}
         onDelete={handleDelete}
+        onManualSetup={setManualAgent}
       />
 
       {/* Add custom agent dialog */}
@@ -69,6 +73,15 @@ export function AgentsPage() {
         open={addAgentOpen}
         onOpenChange={setAddAgentOpen}
         onAdded={reload}
+      />
+
+      {/* Manual setup dialog */}
+      <ManualSetupDialog
+        open={manualAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setManualAgent(null);
+        }}
+        agent={manualAgent}
       />
     </div>
   );
