@@ -1,4 +1,6 @@
+import { BookOpen, Bug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/hooks/useConfig";
 
@@ -124,8 +126,27 @@ export function Sidebar({
             })}
         </div>
 
-        {/* Settings at bottom */}
-        <div className="mt-auto pb-2">
+        {/* Bottom section */}
+        <div className="mt-auto space-y-1 pb-2">
+          <Separator className="mb-2" />
+          <a
+            href="https://www.plugmux.com/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            <BookOpen className="h-4 w-4" />
+            Docs
+          </a>
+          <a
+            href="https://github.com/plugmux/plugmux/issues"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          >
+            <Bug className="h-4 w-4" />
+            Report issue
+          </a>
           <button
             onClick={() => onNavigate("settings")}
             className={cn(

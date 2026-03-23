@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { useEngine } from "@/hooks/useEngine";
@@ -105,32 +105,6 @@ export function SettingsPage() {
           Configure gateway, startup, and appearance.
         </p>
       </div>
-
-      {/* Quick links */}
-      <section className="flex gap-3">
-        <a
-          href="https://www.plugmux.com/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button variant="outline" size="sm">
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            Documentation
-          </Button>
-        </a>
-        <a
-          href="https://github.com/plugmux/plugmux/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button variant="outline" size="sm">
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            Support
-          </Button>
-        </a>
-      </section>
-
-      <Separator className="my-6" />
 
       {/* Gateway */}
       <section className="space-y-4">
