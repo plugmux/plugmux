@@ -53,7 +53,7 @@ export function AgentIcon({ icon, name, className = "h-5 w-5" }: AgentIconProps)
 
   return (
     <div
-      className={`flex items-center justify-center rounded-md bg-foreground/80 text-background text-[10px] font-bold dark:bg-white/80 dark:text-black ${className}`}
+      className={`flex items-center justify-center rounded-md bg-foreground text-background text-[10px] font-bold dark:bg-white dark:text-black ${className}`}
       style={{ width: 24, height: 24, minWidth: 24, minHeight: 24 }}
     >
       {initials}
