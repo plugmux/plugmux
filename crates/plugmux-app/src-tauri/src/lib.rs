@@ -67,6 +67,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             // Create main window programmatically so we can set traffic light position
             #[allow(unused_mut)]

@@ -84,4 +84,5 @@ jobs:
           releaseBody: "See the [full changelog](https://github.com/plugmux/plugmux/commits/main)."
           releaseDraft: false
           prerelease: ${{ contains(needs.check-version.outputs.version, 'beta') }}
+          updaterJsonKeepUniversal: true
           args: --target ${{ matrix.target }}
