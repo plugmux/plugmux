@@ -90,7 +90,7 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
 
     // 7. Start axum server
     let config = Arc::new(RwLock::new(cfg));
-    router::start_server(config, manager, port).await?;
+    router::start_server(config, manager, port, None).await?;
 
     Ok(())
 }

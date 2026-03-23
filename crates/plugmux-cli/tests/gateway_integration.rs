@@ -74,7 +74,7 @@ async fn test_full_gateway_flow() {
     // 3. Build the axum router and spawn the HTTP server on a random port
     // -----------------------------------------------------------------------
     let config = Arc::new(RwLock::new(config));
-    let router = build_router(config.clone(), manager.clone());
+    let router = build_router(config.clone(), manager.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await

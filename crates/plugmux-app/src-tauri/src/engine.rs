@@ -129,7 +129,7 @@ impl Engine {
 
         info!("plugmux gateway listening on http://{addr}");
 
-        let router = router::build_router(config, manager);
+        let router = router::build_router(config, manager, None);
         tokio::spawn(async move {
             let server = axum::serve(listener, router);
             tokio::select! {

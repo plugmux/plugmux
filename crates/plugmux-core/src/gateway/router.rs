@@ -17,10 +17,13 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use crate::config::Config;
+use crate::db::Db;
 use crate::manager::ServerManager;
 use crate::plugmux_layer::PlugmuxLayer;
 use crate::proxy::{ProxyError, PromptInfo, ResourceInfo, ToolInfo};
 use crate::proxy_layer::ProxyLayer;
+
+use super::{agent_detect, logging};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,6 +39,7 @@ const GLOBAL_ENV: &str = "global";
 struct AppState {
     plugmux: Arc<PlugmuxLayer>,
     proxy: Arc<ProxyLayer>,
+    db: Option<Arc<Db>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -46,10 +50,11 @@ struct AppState {
 pub fn build_router(
     config: Arc<RwLock<Config>>,
     manager: Arc<ServerManager>,
+    db: Option<Arc<Db>>,
 ) -> Router {
     let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone()));
     let proxy = Arc::new(ProxyLayer::new(config, manager));
-    let state = AppState { plugmux, proxy };
+    let state = AppState { plugmux, proxy, db };
 
     Router::new()
         .route("/env/{env_id}", post(handle_jsonrpc))
@@ -62,8 +67,9 @@ pub async fn start_server(
     config: Arc<RwLock<Config>>,
     manager: Arc<ServerManager>,
     port: u16,
+    db: Option<Arc<Db>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let router = build_router(config, manager);
+    let router = build_router(config, manager, db);
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("plugmux gateway listening on http://{addr}");
@@ -86,8 +92,10 @@ async fn handle_health() -> impl IntoResponse {
 async fn handle_jsonrpc(
     State(state): State<AppState>,
     Path(env_id): Path<String>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let start = std::time::Instant::now();
     let id = body.get("id").cloned().unwrap_or(Value::Null);
     let method = body
         .get("method")
@@ -95,7 +103,27 @@ async fn handle_jsonrpc(
         .unwrap_or("");
     let params = body.get("params").cloned().unwrap_or(Value::Null);
 
+    let user_agent = headers.get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let agent_id = user_agent.as_deref()
+        .and_then(agent_detect::detect_agent);
+
     let result = dispatch(&state, &env_id, method, &params).await;
+    let duration = start.elapsed();
+
+    // Log to DB
+    if let Some(ref db) = state.db {
+        let log_result = match &result {
+            Ok(v) => Ok(v.clone()),
+            Err(e) => Err(e.to_string()),
+        };
+        logging::log_request(
+            db, &env_id, method, &params, &log_result,
+            duration, user_agent.as_deref(), agent_id.as_deref(),
+            "default-session",
+        );
+    }
 
     match result {
         Ok(value) => (
