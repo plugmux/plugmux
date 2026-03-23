@@ -1,7 +1,7 @@
 {
   "name": "plugmux-app",
   "private": true,
-  "version": "0.0.1-beta",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
