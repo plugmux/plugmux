@@ -129,7 +129,9 @@ impl Engine {
 
         info!("plugmux gateway listening on http://{addr}");
 
-        let router = router::build_router(config, manager, None);
+        let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
+            .map_err(|e| format!("failed to open database: {e}"))?;
+        let router = router::build_router(config, manager, Some(db));
         tokio::spawn(async move {
             let server = axum::serve(listener, router);
             tokio::select! {

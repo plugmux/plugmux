@@ -89,8 +89,10 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // 7. Start axum server
+    let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
+        .map_err(|e| format!("failed to open database: {e}"))?;
     let config = Arc::new(RwLock::new(cfg));
-    router::start_server(config, manager, port, None).await?;
+    router::start_server(config, manager, port, Some(db)).await?;
 
     Ok(())
 }
