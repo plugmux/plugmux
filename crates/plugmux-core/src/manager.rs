@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::proxy::http_sse::HttpSseMcpClient;
 use crate::proxy::stdio::StdioMcpClient;
-use crate::proxy::{McpClient, ProxyError, ToolInfo};
+use crate::proxy::{McpClient, ProxyError, ToolInfo, ResourceInfo, PromptInfo};
 use crate::server::{HealthStatus, ServerConfig, Transport};
 
 /// A running MCP server together with its configuration and health status.
@@ -115,6 +115,54 @@ impl ServerManager {
             ProxyError::Transport(format!("server not found: {server_id}"))
         })?;
         managed.client.call_tool(tool_name, args).await
+    }
+
+    /// List all resources exposed by a specific server.
+    pub async fn list_resources(&self, server_id: &str) -> Result<Vec<ResourceInfo>, ProxyError> {
+        let map = self.servers.read().await;
+        let managed = map.get(server_id).ok_or_else(|| {
+            ProxyError::Transport(format!("server not found: {server_id}"))
+        })?;
+        managed.client.list_resources().await
+    }
+
+    /// Read a resource from a specific server.
+    pub async fn read_resource(&self, server_id: &str, uri: &str) -> Result<Value, ProxyError> {
+        let map = self.servers.read().await;
+        let managed = map.get(server_id).ok_or_else(|| {
+            ProxyError::Transport(format!("server not found: {server_id}"))
+        })?;
+        managed.client.read_resource(uri).await
+    }
+
+    /// List all prompts exposed by a specific server.
+    pub async fn list_prompts(&self, server_id: &str) -> Result<Vec<PromptInfo>, ProxyError> {
+        let map = self.servers.read().await;
+        let managed = map.get(server_id).ok_or_else(|| {
+            ProxyError::Transport(format!("server not found: {server_id}"))
+        })?;
+        managed.client.list_prompts().await
+    }
+
+    /// Get a prompt from a specific server.
+    pub async fn get_prompt(&self, server_id: &str, name: &str, args: Value) -> Result<Value, ProxyError> {
+        let map = self.servers.read().await;
+        let managed = map.get(server_id).ok_or_else(|| {
+            ProxyError::Transport(format!("server not found: {server_id}"))
+        })?;
+        managed.client.get_prompt(name, args).await
+    }
+
+    /// Send roots to specific servers (scoped to an environment's server list).
+    pub async fn broadcast_roots(&self, server_ids: &[String], roots: Value) {
+        let map = self.servers.read().await;
+        for id in server_ids {
+            if let Some(managed) = map.get(id) {
+                if let Err(e) = managed.client.send_roots(roots.clone()).await {
+                    tracing::warn!(server_id = %id, error = %e, "failed to send roots");
+                }
+            }
+        }
     }
 
     /// List all managed servers with their health status.
