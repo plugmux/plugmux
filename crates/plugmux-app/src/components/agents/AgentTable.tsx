@@ -41,7 +41,7 @@ function AgentRow({
   onDelete: (agent: DetectedAgent) => void;
 }) {
   const isConnected = agent.status === "green" || agent.status === "yellow";
-  const isInstalled = agent.installed;
+  const isInstalled = agent.installed || agent.source === "custom";
 
   return (
     <div className="flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5">
