@@ -2,7 +2,7 @@
 
 **Author:** Lasha Kvantaliani
 **Date:** 2026-03-23
-**Status:** Draft v1
+**Status:** Draft v2 (post-review)
 
 ---
 
@@ -24,6 +24,11 @@ A Cloudflare-hosted backend that serves plugmux's curated MCP server catalog, ha
 - Real-time sync (WebSockets, live updates) — periodic pull is sufficient
 - Environment presets — deferred
 - Billing/payments — free for now
+- Syncing environment variables / secrets — sensitive, machine-specific, deferred
+
+### Prerequisites
+
+- Extract `plugmux-types` crate from `plugmux-core` (shared types: `CatalogEntry`, `Transport`, `Connectivity`, sync action types). Must be lightweight and WASM-compatible.
 
 ---
 
@@ -39,6 +44,10 @@ plugmux maintains its own curated server registry. Servers are hand-picked for q
 
 Initial metadata (SVGs, descriptions) can be sourced from Smithery, but plugmux owns and maintains the data going forward. Smithery is a data source for bootstrapping, not a runtime dependency.
 
+### Online/Offline Behavior
+
+When online, the app fetches the catalog from the API and caches it in redb. When offline, the app uses the cached catalog. The bundled `catalog/servers.json` serves as a fallback if no cached catalog exists (fresh install, no network).
+
 ### Catalog Entry Schema (D1)
 
 ```sql
@@ -48,7 +57,7 @@ CREATE TABLE catalog_servers (
     description     TEXT NOT NULL,          -- short description
     icon_key        TEXT,                   -- R2 object key "figma.svg"
     icon_hash       TEXT,                   -- hash for cache busting
-    category        TEXT NOT NULL,          -- "design", "dev-tools", "database"
+    categories      TEXT NOT NULL,          -- JSON array: ["design", "dev-tools"]
     transport       TEXT NOT NULL,          -- "stdio" | "http"
     command         TEXT,                   -- for stdio servers
     args            TEXT,                   -- JSON array, for stdio servers
@@ -62,7 +71,10 @@ CREATE TABLE catalog_servers (
 );
 ```
 
-`tool_count` and `security_score` are maintained by a manual reconciliation script (see Section 8).
+Notes:
+- `categories` is a JSON array (multi-category support), matching the frontend TypeScript type.
+- `args` is a JSON array stored as TEXT. API validates JSON on read/write.
+- `tool_count` and `security_score` are maintained by a manual reconciliation script (see Section 8).
 
 ---
 
@@ -92,7 +104,20 @@ CREATE TABLE devices (
 );
 ```
 
-**Device identity flow:**
+### Favorites (D1)
+
+```sql
+CREATE TABLE favorites (
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    server_id       TEXT NOT NULL,
+    added_at        TEXT NOT NULL,
+    PRIMARY KEY (user_id, server_id)
+);
+```
+
+Materialized from the change log. Kept as a table for fast reads — the change log is the source of truth, but this table is rebuilt/updated as changes are applied.
+
+### Device Identity Flow
 
 1. First app launch — generate UUID, store in redb
 2. User logs in with GitHub — device registers to their account
@@ -123,8 +148,12 @@ CREATE TABLE changes (
     payload         TEXT NOT NULL           -- JSON blob
 );
 
-CREATE INDEX idx_changes_user_time ON changes(user_id, timestamp);
+CREATE INDEX idx_changes_user_id ON changes(user_id, id);
 ```
+
+### Sync Cursor
+
+Sync uses the auto-increment `id` column, not timestamps. This avoids clock skew issues between devices. Each device stores its `last_seen_change_id` in redb.
 
 ### Actions
 
@@ -134,27 +163,70 @@ CREATE INDEX idx_changes_user_time ON changes(user_id, timestamp);
 | `remove_server_from_env` | `{env: "backend", server_id: "redis"}` |
 | `create_env` | `{name: "backend", servers: ["postgres", "redis"]}` |
 | `delete_env` | `{env: "backend"}` |
-| `update_env` | `{env: "backend", field: "name", value: "Backend API"}` |
+| `update_env` | `{env: "backend", field: "<field>", value: "<value>"}` |
 | `add_favorite` | `{server_id: "figma"}` |
 | `remove_favorite` | `{server_id: "figma"}` |
 | `add_custom_server` | `{id: "my-tool", name: "...", transport: "stdio", ...}` |
-| `update_custom_server` | `{id: "my-tool", field: "name", value: "..."}` |
+| `update_custom_server` | `{id: "my-tool", field: "<field>", value: "..."}` |
 | `remove_custom_server` | `{id: "my-tool"}` |
+
+`update_env` supported fields: `name`.
+
+`update_custom_server` supported fields: `name`, `description`, `command`, `args`, `url`, `enabled`.
+
+**Custom server path caveat:** stdio servers with absolute paths in `command` or `args` are machine-specific. When syncing custom servers, the app should warn the user if a synced server has a path that doesn't exist on the current machine. The server config syncs as metadata — the user may need to adjust paths locally.
 
 ### Conflict Resolution Rules
 
-- **Add + Add** — both apply (set union). No conflict.
-- **Delete + Add** — delete wins.
-- **Rename on two devices** — last-write-wins by timestamp.
+- **Add + Add** — both apply (set union). No conflict. `create_env` is idempotent — if environment already exists, merge servers.
+- **Delete + Add** — last-write-wins (by change `id` order). If an add arrives after a delete, it resurrects the entity. No silent data loss.
+- **Rename on two devices** — last-write-wins by change `id`.
 - **Same server removed on both** — idempotent, no issue.
+
+### Offline Queue
+
+Pending changes are stored in redb under a `sync_queue` key. Changes survive app restarts. On next sync, queued changes are pushed before pulling.
+
+### Change Log Compaction
+
+To prevent unbounded growth:
+- After a successful `GET /sync/snapshot`, the server may delete changes older than 90 days for that user.
+- `GET /sync/pull` returns at most 1,000 changes. If more exist, the client should call `/sync/snapshot` instead for a full rebuild.
 
 ### Sync Flow
 
-1. Device comes online, calls `GET /sync/pull?since=<last_sync_timestamp>`
-2. Server returns all changes for this user since that timestamp (excluding changes from the requesting device)
+1. Device comes online, calls `GET /sync/pull?since_id=<last_seen_change_id>`
+2. Server returns all changes for this user with `id > since_id` (excluding changes from the requesting device)
 3. Device applies changes to local redb
 4. Device pushes its queued local changes via `POST /sync/push`
-5. New device setup: `GET /sync/snapshot` returns full materialized config
+5. Device updates its `last_seen_change_id` in redb
+6. New device setup: `GET /sync/snapshot` returns full materialized config
+
+### Snapshot Response Format
+
+```json
+{
+  "environments": [
+    {
+      "name": "backend",
+      "servers": ["postgres", "redis"],
+      "overrides": {}
+    }
+  ],
+  "favorites": ["figma", "github"],
+  "custom_servers": [
+    {
+      "id": "my-tool",
+      "name": "My Tool",
+      "transport": "stdio",
+      "command": "node",
+      "args": ["/path/to/server.js"],
+      "connectivity": "local"
+    }
+  ],
+  "last_change_id": 4523
+}
+```
 
 ---
 
@@ -162,22 +234,30 @@ CREATE INDEX idx_changes_user_time ON changes(user_id, timestamp);
 
 ### GitHub OAuth (Launch)
 
-Standard OAuth 2.0 redirect flow:
+Standard OAuth 2.0 redirect flow with CSRF protection:
 
-1. App opens `GET /auth/github` — Worker redirects to GitHub authorization
-2. User authorizes — GitHub redirects to callback with code
-3. `GET /auth/github/callback` — Worker exchanges code for access token, creates/finds user in D1, returns a session token (JWT)
+1. App opens `GET /auth/github` — Worker generates a random `state` parameter, stores it in a short-lived KV entry, redirects to GitHub authorization with `state`
+2. User authorizes — GitHub redirects to callback with code and `state`
+3. `GET /auth/github/callback` — Worker verifies `state` matches KV entry, exchanges code for access token, creates/finds user in D1, returns a session token (JWT)
 4. App stores JWT in redb, includes as Bearer token in protected requests
 
 ### Google OAuth (Future)
 
-Same pattern. Deferred until company/project registration is complete. The auth module should be designed to support multiple providers — just add a `google_id` column to users and a second OAuth flow.
+Same pattern. Deferred until company/project registration is complete. Add a `google_id` column to users and a second OAuth flow.
 
 ### Sessions
 
-- JWT tokens with expiration (e.g., 30 days)
-- Refresh on each sync call
-- No refresh token complexity — if expired, user re-authenticates
+- Stateless JWT with 30-day expiration, signed with a Cloudflare Worker Secret
+- Logout is client-side only (delete JWT from redb) — no server-side session table needed
+- If expired, user re-authenticates via OAuth
+- No silent refresh — token is valid until expiry
+
+### Required Cloudflare Secrets
+
+- `GITHUB_CLIENT_ID` — GitHub OAuth app client ID
+- `GITHUB_CLIENT_SECRET` — GitHub OAuth app client secret
+- `JWT_SECRET` — signing key for JWT tokens
+- `ADMIN_SECRET` — API key for admin/reconciler endpoints
 
 ---
 
@@ -211,39 +291,49 @@ plugmux-icons/
 
 | Component | Technology |
 |-----------|-----------|
-| Compute | Cloudflare Workers (Rust/WASM) |
+| Compute | Cloudflare Workers (Rust/WASM preferred, TypeScript fallback) |
 | Database | Cloudflare D1 (SQLite) |
 | Object Storage | Cloudflare R2 |
 | Auth | GitHub OAuth, built into Worker |
 | Domain | Attached to existing Cloudflare account |
+
+**Worker language note:** Rust/WASM is preferred to match the codebase. However, Cloudflare free tier has a 1 MB compressed Worker size limit. If the Rust/WASM binary exceeds this, the Worker should be written in TypeScript instead — the shared types from `plugmux-types` can be mirrored as TypeScript interfaces. This is a pragmatic fallback, not a failure.
 
 ### Endpoints
 
 **Public (no auth):**
 
 ```
-GET  /catalog/servers                  — list, search, filter by category
-GET  /catalog/servers/:id              — single server detail
-GET  /icons/:id.svg                    — SVG from R2
+GET  /v1/catalog/servers              — list, search, filter (paginated: ?limit=&cursor=)
+GET  /v1/catalog/servers/:id          — single server detail
+GET  /v1/icons/:id.svg                — SVG from R2
+GET  /v1/health                       — status check
 ```
 
 **Auth:**
 
 ```
-GET  /auth/github                      — initiate OAuth redirect
-GET  /auth/github/callback             — exchange code, return JWT
-POST /auth/logout                      — invalidate session
+GET  /v1/auth/github                  — initiate OAuth redirect
+GET  /v1/auth/github/callback         — exchange code, return JWT
 ```
 
 **Protected (Bearer token):**
 
 ```
-POST /devices/register                 — register device to user account
-GET  /sync/pull?since=<timestamp>      — pull changes since last sync
-POST /sync/push                        — push change log entries
-GET  /sync/snapshot                    — full config for new device setup
-GET  /user/profile                     — account info
-DELETE /user/account                   — delete account and all data
+POST /v1/devices/register             — register device to user account
+GET  /v1/sync/pull?since_id=<id>      — pull changes since last sync
+POST /v1/sync/push                    — push change log entries
+GET  /v1/sync/snapshot                — full config for new device setup
+GET  /v1/user/profile                 — account info
+DELETE /v1/user/account               — delete account (requires re-auth)
+```
+
+**Admin (admin secret header):**
+
+```
+PUT  /v1/admin/catalog/servers/:id    — create/update catalog entry
+DELETE /v1/admin/catalog/servers/:id  — remove catalog entry
+POST /v1/admin/icons/:id.svg          — upload icon to R2
 ```
 
 ### Free Tier Capacity
@@ -268,8 +358,8 @@ A local desktop script (Python or Rust) run manually (~monthly) to keep catalog 
 1. Connects to each catalog server (stdio: spawn process, http: connect to URL)
 2. Calls `tools/list` to get current tool count
 3. Optionally runs MCP-Scan (Invariant open-source) for security analysis
-4. Diffs results against current D1 data via the API
-5. Uploads changes to `PUT /catalog/servers/:id` (admin-only endpoint)
+4. Diffs results against current D1 data via the admin API
+5. Uploads changes to `PUT /v1/admin/catalog/servers/:id`
 6. Logs any servers that failed to connect or changed significantly
 
 **Not a Cloudflare service** — runs on any machine with the required runtimes (Node, Python, etc.). Can run on sweenkserver, local laptop, or anywhere.
@@ -285,14 +375,14 @@ A local desktop script (Python or Rust) run manually (~monthly) to keep catalog 
 ├── plugmux/                    (public repo)
 │   ├── crates/
 │   │   ├── plugmux-core/      — gateway, redb, sync client
-│   │   ├── plugmux-types/     — shared types (catalog, sync actions)
+│   │   ├── plugmux-types/     — shared types (catalog, sync actions) [NEW]
 │   │   ├── plugmux-cli/       — CLI binary
 │   │   └── plugmux-app/       — Tauri desktop app
-│   └── catalog/                — existing local catalog data
+│   └── catalog/                — bundled fallback catalog data
 │
 └── plugmux-api/                (private repo)
     ├── src/
-    │   ├── routes/             — catalog, auth, sync, devices
+    │   ├── routes/             — catalog, auth, sync, devices, admin
     │   ├── models/             — D1 queries, types
     │   ├── auth/               — GitHub OAuth flow
     │   └── lib.rs              — Worker entrypoint
@@ -305,12 +395,20 @@ A local desktop script (Python or Rust) run manually (~monthly) to keep catalog 
 
 ### Shared Types
 
-`plugmux-types` is a lightweight crate in the public repo containing only struct definitions shared between client and API:
+`plugmux-types` is a lightweight crate in the public repo containing only struct definitions shared between client and API. It must:
 
-- `CatalogEntry` — server catalog schema
+- Be `no_std`-compatible or at minimum compile to `wasm32-unknown-unknown`
+- Only depend on `serde` and `serde_json`
+- Not pull in any of `plugmux-core`'s heavy dependencies (tokio, axum, rmcp, etc.)
+
+Types to extract from `plugmux-core`:
+- `CatalogEntry` — server catalog schema (updated with `icon_key`, `icon_hash`, `categories`, `official`, `tool_count`, `security_score`, `added_at`, `updated_at` fields)
+- `Transport` — enum: stdio, http
+- `Connectivity` — enum: local, online
 - `SyncAction` — change log action enum
-- `ChangeEntry` — change log entry
-- `DeviceInfo` — device registration
+- `ChangeEntry` — change log entry struct
+- `DeviceInfo` — device registration struct
+- `SyncSnapshot` — snapshot response struct
 
 The API depends on it via git:
 
@@ -318,16 +416,21 @@ The API depends on it via git:
 plugmux-types = { git = "https://github.com/lasharela/plugmux", path = "crates/plugmux-types" }
 ```
 
+If the API is written in TypeScript (see Worker language note), these types are mirrored as TypeScript interfaces in the API repo.
+
 ---
 
 ## 10. Security Considerations
 
 - All API communication over HTTPS (Cloudflare handles TLS)
-- JWT tokens for session auth, stored in redb (not localStorage)
+- Stateless JWT tokens for session auth, stored in redb (not localStorage or cookies)
 - GitHub OAuth tokens never stored — only used during exchange, then discarded
-- Admin endpoints for catalog updates require a separate admin secret
-- User data deletion via `DELETE /user/account` removes all data (GDPR-friendly)
-- No user credentials stored — auth delegated to GitHub entirely
+- OAuth flow uses `state` parameter for CSRF protection
+- Admin endpoints require `ADMIN_SECRET` header — separate from user auth
+- `DELETE /user/account` requires re-authentication (fresh OAuth flow)
+- User data deletion removes all data: user record, devices, changes, favorites (GDPR-friendly)
+- No user credentials stored — auth delegated entirely to GitHub
+- API versioned (`/v1/`) to allow breaking changes without stranding old app versions
 
 ---
 
@@ -339,7 +442,8 @@ plugmux-types = { git = "https://github.com/lasharela/plugmux", path = "crates/p
 - **Usage analytics** — install counts, popular servers (anonymized)
 - **Config export/import** — manual JSON backup/restore as alternative to cloud sync
 - **Admin dashboard** — web UI for managing catalog entries (currently done via API/script)
+- **Environment variable sync** — securely syncing server credentials (requires encryption layer)
 
 ---
 
-*plugmux Cloud Backend Design Spec — Lasha Kvantaliani — March 2026 — Draft v1*
+*plugmux Cloud Backend Design Spec — Lasha Kvantaliani — March 2026 — Draft v2*

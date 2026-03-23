@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
-import { getPort } from "@/lib/commands";
+import { addCustomAgent, getPort } from "@/lib/commands";
+import { toast } from "sonner";
 
 interface AddAgentDialogProps {
   open: boolean;
@@ -46,10 +47,15 @@ export function AddAgentDialog({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!name.trim()) return;
-    onAdded();
-    onOpenChange(false);
+    try {
+      await addCustomAgent(name.trim(), "", "json", "mcpServers");
+      onAdded();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(`Failed to add agent: ${e}`);
+    }
   }
 
   return (
