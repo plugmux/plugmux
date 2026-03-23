@@ -60,6 +60,8 @@ pub fn run() {
             commands::add_agent_from_registry,
             commands::add_custom_agent,
             commands::dismiss_agent,
+            // Logs
+            commands::get_recent_logs,
         ])
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

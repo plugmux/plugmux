@@ -5,6 +5,7 @@ import { CatalogPage } from "@/pages/CatalogPage";
 import { PresetsPage } from "@/pages/PresetsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { AgentsPage } from "@/pages/AgentsPage";
+import { LogsPage } from "@/pages/LogsPage";
 import { CreateEnvironmentDialog } from "@/components/environments/CreateEnvironmentDialog";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -27,8 +28,10 @@ function App() {
         return <PresetsPage onNavigate={setActivePage} />;
       case "settings":
         return <SettingsPage />;
+      case "logs":
+        return <LogsPage />;
       default:
-        return <EnvironmentPage envId="default" onNavigate={setActivePage} />;
+        return <AgentsPage />;
     }
   }
 

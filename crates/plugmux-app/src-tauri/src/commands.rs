@@ -8,6 +8,7 @@ use plugmux_core::agents::{
 };
 use plugmux_core::catalog::{CatalogEntry, Preset};
 use plugmux_core::config::{self, Config, Environment, Permissions, PermissionLevel};
+use plugmux_core::db::logs::{self, LogEntry};
 use plugmux_core::environment;
 use plugmux_core::migration;
 use plugmux_core::server::{HealthStatus, ServerConfig};
@@ -557,4 +558,21 @@ pub async fn migrate_config(engine: State<'_, Arc<Engine>>) -> Result<(), String
     migration::migrate(&engine.catalog).map_err(|e| e.to_string())?;
     engine.reload_config().await?;
     engine.reload_custom_servers()
+}
+
+// ---------------------------------------------------------------------------
+// Logs
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_recent_logs(
+    engine: State<'_, Arc<Engine>>,
+    limit: Option<usize>,
+) -> Result<Vec<LogEntry>, String> {
+    let db_guard = engine.db.read().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| "Database not initialized — is the engine running?".to_string())?;
+    logs::read_recent_logs(db, limit.unwrap_or(100))
+        .map_err(|e| format!("failed to read logs: {e}"))
 }

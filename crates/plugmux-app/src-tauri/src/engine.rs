@@ -8,6 +8,7 @@ use tracing::{error, info, warn};
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config::{self, Config};
 use plugmux_core::custom_servers::CustomServerStore;
+use plugmux_core::db::Db;
 use plugmux_core::gateway::router;
 use plugmux_core::health::start_health_checker;
 use plugmux_core::manager::ServerManager;
@@ -42,6 +43,7 @@ pub struct Engine {
     pub manager: Arc<ServerManager>,
     pub status: Arc<RwLock<EngineStatus>>,
     pub port: Arc<RwLock<u16>>,
+    pub db: Arc<RwLock<Option<Arc<Db>>>>,
     pub shutdown_tx: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
 }
 
@@ -78,6 +80,7 @@ impl Engine {
             manager: Arc::new(ServerManager::new()),
             status: Arc::new(RwLock::new(EngineStatus::Stopped)),
             port: Arc::new(RwLock::new(port)),
+            db: Arc::new(RwLock::new(None)),
             shutdown_tx: Arc::new(RwLock::new(None)),
         }
     }
@@ -129,8 +132,9 @@ impl Engine {
 
         info!("plugmux gateway listening on http://{addr}");
 
-        let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
+        let db = Db::open(&Db::default_path())
             .map_err(|e| format!("failed to open database: {e}"))?;
+        *self.db.write().await = Some(db.clone());
         let router = router::build_router(config, manager, Some(db));
         tokio::spawn(async move {
             let server = axum::serve(listener, router);

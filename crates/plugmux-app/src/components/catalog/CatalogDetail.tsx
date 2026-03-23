@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 import type { CatalogEntry, Environment } from "@/lib/commands";
 
 interface CatalogDetailProps {
@@ -26,23 +25,13 @@ interface CatalogDetailProps {
   onClose: () => void;
 }
 
-const COLORS = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-purple-500",
-  "bg-orange-500",
-  "bg-pink-500",
-  "bg-teal-500",
-  "bg-indigo-500",
-  "bg-rose-500",
-];
-
 function colorForId(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = (hash * 31 + id.charCodeAt(i)) | 0;
   }
-  return COLORS[Math.abs(hash) % COLORS.length];
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 60%, 55%)`;
 }
 
 export function CatalogDetail({
@@ -57,6 +46,7 @@ export function CatalogDetail({
   const installedEnvs = environments.filter((e) =>
     installedIn.includes(e.id),
   );
+  const categories = entry.categories ?? [entry.category];
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -64,19 +54,36 @@ export function CatalogDetail({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div
-              className={cn(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white",
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl font-mono text-lg font-bold"
+              style={{
                 color,
-              )}
+                background: `color-mix(in srgb, ${color} 12%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
+              }}
             >
               {initial}
             </div>
             <div>
-              <DialogTitle>{entry.name}</DialogTitle>
-              <DialogDescription className="mt-1">
-                <Badge variant="secondary" className="text-xs">
-                  {entry.category}
-                </Badge>
+              <DialogTitle className="flex items-center gap-2">
+                {entry.name}
+                {entry.official && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-semibold text-primary"
+                  >
+                    Official
+                  </Badge>
+                )}
+              </DialogTitle>
+              <DialogDescription className="mt-1.5 flex flex-wrap gap-1.5">
+                {categories.filter(Boolean).map((cat) => (
+                  <span
+                    key={cat}
+                    className="rounded-[5px] border border-muted-foreground/15 bg-muted-foreground/8 px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
+                  >
+                    {cat}
+                  </span>
+                ))}
               </DialogDescription>
             </div>
           </div>

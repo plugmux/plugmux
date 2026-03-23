@@ -1,5 +1,11 @@
 # plugmux
 
+[![CI](https://github.com/plugmux/plugmux/actions/workflows/ci.yml/badge.svg)](https://github.com/plugmux/plugmux/actions/workflows/ci.yml)
+[![Release](https://github.com/plugmux/plugmux/actions/workflows/release.yml/badge.svg)](https://github.com/plugmux/plugmux/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
+[![Tauri v2](https://img.shields.io/badge/tauri-v2-blue.svg)](https://v2.tauri.app)
+
 **One URL, all your MCP servers.**
 
 plugmux is a local gateway that aggregates multiple [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers behind a single HTTP endpoint. Instead of configuring each AI agent with a dozen separate MCP server connections, point it at one plugmux URL and let the agent discover and use tools across all your servers dynamically.

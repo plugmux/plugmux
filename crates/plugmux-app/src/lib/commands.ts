@@ -38,11 +38,15 @@ export interface CatalogEntry {
   description: string;
   icon: string;
   category: string;
+  categories?: string[];
   transport: "stdio" | "http";
   command?: string;
   args?: string[];
   url?: string;
   connectivity: "local" | "online";
+  official?: boolean;
+  installs?: number;
+  added?: string;
 }
 
 export interface Preset {

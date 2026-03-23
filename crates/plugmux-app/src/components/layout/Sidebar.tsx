@@ -7,6 +7,7 @@ import mcpIcon from "@assets/icons/mcp.svg";
 import layersIcon from "@assets/icons/layers.svg";
 import plusIcon from "@assets/icons/plus.svg";
 import settingsIcon from "@assets/icons/settings.svg";
+import logsIcon from "@assets/icons/logs.svg";
 
 function Icon({ src, className = "h-4 w-4" }: { src: string; className?: string }) {
   return <img src={src} alt="" className={`dark:invert ${className}`} />;
@@ -52,6 +53,18 @@ export function Sidebar({
           <Icon src={mcpIcon} />
           MCP Servers
         </button>
+        <button
+          onClick={() => onNavigate("logs")}
+          className={cn(
+            "flex items-center gap-2 rounded-md border-l-[3px] px-2 py-1.5 text-sm",
+            activePage === "logs"
+              ? "border-primary bg-accent text-accent-foreground"
+              : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+          )}
+        >
+          <Icon src={logsIcon} />
+          Logs
+        </button>
         {/* Environments section */}
         <div className="mt-4">
           <div className="flex items-center justify-between pl-2 pr-1 pb-1">
@@ -66,25 +79,25 @@ export function Sidebar({
             </button>
           </div>
 
-          {/* Default environment */}
+          {/* Global environment (always first, not removable) */}
           <button
-            onClick={() => onNavigate("env:default")}
+            onClick={() => onNavigate("env:global")}
             className={cn(
               "flex w-full items-center justify-between rounded-md border-l-[3px] px-2 py-1.5 text-sm",
-              activePage === "env:default"
+              activePage === "env:global"
                 ? "border-primary bg-accent text-accent-foreground"
                 : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             <div className="flex items-center gap-2">
               <Icon src={layersIcon} />
-              <span className="truncate">Default</span>
+              <span className="truncate">Global</span>
             </div>
           </button>
 
           {/* Other environments */}
           {config?.environments
-            .filter((env) => env.id !== "default")
+            .filter((env) => env.id !== "global")
             .map((env) => {
               const page = `env:${env.id}`;
               const serverCount = env.servers.length;
