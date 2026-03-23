@@ -4,14 +4,18 @@
 use async_trait::async_trait;
 use rmcp::{
     RoleClient, ServiceExt,
-    model::CallToolRequestParams,
+    model::{
+        CallToolRequestParams,
+        GetPromptRequestParams,
+        ReadResourceRequestParams,
+    },
     service::RunningService,
     transport::StreamableHttpClientTransport,
 };
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use super::{McpClient, ProxyError, ToolInfo};
+use super::{McpClient, ProxyError, PromptInfo, ResourceInfo, ToolInfo};
 
 /// An MCP client that communicates with an upstream server over HTTP
 /// (MCP Streamable HTTP transport — single POST endpoint with optional SSE streaming).
@@ -122,6 +126,84 @@ impl McpClient for HttpSseMcpClient {
                 .map_err(|e| ProxyError::Transport(format!("failed to serialize result: {e}")))
         }
     }
+
+    async fn list_resources(&self) -> Result<Vec<ResourceInfo>, ProxyError> {
+        let guard = self.service.lock().await;
+        let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
+        let resources = svc
+            .list_all_resources()
+            .await
+            .map_err(|e| ProxyError::Transport(format!("list_resources failed: {e}")))?;
+        Ok(resources
+            .into_iter()
+            .map(|r| ResourceInfo {
+                uri: r.uri.clone(),
+                name: r.name.clone(),
+                description: r.description.clone(),
+                mime_type: r.mime_type.clone(),
+            })
+            .collect())
+    }
+
+    async fn read_resource(&self, uri: &str) -> Result<Value, ProxyError> {
+        let guard = self.service.lock().await;
+        let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
+        let params = ReadResourceRequestParams::new(uri);
+        let result = svc
+            .read_resource(params)
+            .await
+            .map_err(|e| ProxyError::Transport(format!("read_resource failed: {e}")))?;
+        serde_json::to_value(&result)
+            .map_err(|e| ProxyError::Transport(format!("failed to serialize resource: {e}")))
+    }
+
+    async fn list_prompts(&self) -> Result<Vec<PromptInfo>, ProxyError> {
+        let guard = self.service.lock().await;
+        let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
+        let prompts = svc
+            .list_all_prompts()
+            .await
+            .map_err(|e| ProxyError::Transport(format!("list_prompts failed: {e}")))?;
+        Ok(prompts
+            .into_iter()
+            .map(|p| PromptInfo {
+                name: p.name.clone(),
+                description: p.description.clone(),
+                arguments: p
+                    .arguments
+                    .as_ref()
+                    .map(|args| {
+                        args.iter()
+                            .map(|a| crate::proxy::PromptArgument {
+                                name: a.name.clone(),
+                                description: a.description.clone(),
+                                required: a.required.unwrap_or(false),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    async fn get_prompt(&self, name: &str, args: Value) -> Result<Value, ProxyError> {
+        let guard = self.service.lock().await;
+        let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
+        let params = match args {
+            Value::Object(map) => {
+                GetPromptRequestParams::new(name).with_arguments(map)
+            }
+            _ => GetPromptRequestParams::new(name),
+        };
+        let result = svc
+            .get_prompt(params)
+            .await
+            .map_err(|e| ProxyError::Transport(format!("get_prompt failed: {e}")))?;
+        serde_json::to_value(&result)
+            .map_err(|e| ProxyError::Transport(format!("failed to serialize prompt: {e}")))
+    }
+
+    // TODO: implement send_roots when rmcp supports arbitrary notifications
 
     async fn health_check(&self) -> bool {
         let guard = self.service.lock().await;
