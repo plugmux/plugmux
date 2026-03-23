@@ -85,9 +85,10 @@ mod tests {
         let id = pa.add("env1", "server1", "enable_server");
         let found = pa.find_existing("env1", "server1", "enable_server");
         assert_eq!(found, Some(id.as_str()));
-        assert!(pa
-            .find_existing("env1", "server1", "disable_server")
-            .is_none());
+        assert!(
+            pa.find_existing("env1", "server1", "disable_server")
+                .is_none()
+        );
     }
 
     #[test]

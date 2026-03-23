@@ -10,7 +10,7 @@ pub mod tools;
 
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Config, PermissionLevel};
@@ -238,7 +238,7 @@ impl PlugmuxLayer {
             _ => {
                 return Err(ProxyError::ToolCallFailed(format!(
                     "Unknown action: {action}"
-                )))
+                )));
             }
         };
         match level {
@@ -261,9 +261,9 @@ impl PlugmuxLayer {
                     ),
                 })
             }
-            PermissionLevel::Disable => {
-                Err(ProxyError::ToolCallFailed("This action is not available".into()))
-            }
+            PermissionLevel::Disable => Err(ProxyError::ToolCallFailed(
+                "This action is not available".into(),
+            )),
         }
     }
 
@@ -329,9 +329,7 @@ fn require_str(args: &Value, field: &str) -> Result<String, ProxyError> {
     args.get(field)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            ProxyError::ToolCallFailed(format!("missing required argument: {field}"))
-        })
+        .ok_or_else(|| ProxyError::ToolCallFailed(format!("missing required argument: {field}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -607,10 +605,7 @@ mod tests {
 
         // Confirm
         let result = layer
-            .call_tool(
-                "plugmux__confirm_action",
-                json!({"action_id": action_id}),
-            )
+            .call_tool("plugmux__confirm_action", json!({"action_id": action_id}))
             .await;
         assert!(result.is_ok());
 
@@ -633,10 +628,12 @@ mod tests {
         let result = layer.read_resource("plugmux://servers").await;
         assert!(result.is_ok());
         let val = result.unwrap();
-        assert!(val["contents"][0]["uri"]
-            .as_str()
-            .unwrap()
-            .contains("servers"));
+        assert!(
+            val["contents"][0]["uri"]
+                .as_str()
+                .unwrap()
+                .contains("servers")
+        );
     }
 
     #[tokio::test]

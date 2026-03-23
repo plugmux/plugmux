@@ -12,6 +12,7 @@ import dify from "@assets/agent-icons/dify.svg";
 import gemini from "@assets/agent-icons/gemini.svg";
 import githubcopilot from "@assets/agent-icons/githubcopilot.svg";
 import goose from "@assets/agent-icons/goose.svg";
+import kiro from "@assets/agent-icons/kiro.svg";
 import junie from "@assets/agent-icons/junie.svg";
 import lmstudio from "@assets/agent-icons/lmstudio.svg";
 import monica from "@assets/agent-icons/monica.svg";
@@ -28,7 +29,7 @@ import zed from "@assets/agent-icons/zed.svg";
 
 const icons: Record<string, string> = {
   antigravity, chatgpt, cherrystudio, claude, claudecode, cline, codex, copilot, coze,
-  cursor, dify, gemini, githubcopilot, goose, junie, lmstudio, monica,
+  cursor, dify, gemini, githubcopilot, goose, kiro, junie, lmstudio, monica,
   n8n, opencode, openhands, openwebui, poe, roocode, trae, vscode, windsurf, zed,
 };
 

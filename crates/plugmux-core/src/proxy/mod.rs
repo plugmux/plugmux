@@ -18,10 +18,7 @@ pub enum ProxyError {
     #[error("timeout")]
     Timeout,
     #[error("approval required: {message}")]
-    ApprovalRequired {
-        action_id: String,
-        message: String,
-    },
+    ApprovalRequired { action_id: String, message: String },
 }
 
 #[derive(Debug, Clone)]

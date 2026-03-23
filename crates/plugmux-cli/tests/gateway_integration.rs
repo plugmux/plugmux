@@ -12,7 +12,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 
-use plugmux_core::config::{Config, Environment, Permissions, PermissionLevel};
+use plugmux_core::config::{Config, Environment, PermissionLevel, Permissions};
 use plugmux_core::gateway::router::build_router;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::server::{Connectivity, ServerConfig, Transport};
@@ -29,7 +29,9 @@ async fn jsonrpc_request(client: &reqwest::Client, url: &str, body: Value) -> Va
         .await
         .expect("HTTP request failed");
     assert_eq!(resp.status(), 200);
-    resp.json::<Value>().await.expect("failed to parse JSON response")
+    resp.json::<Value>()
+        .await
+        .expect("failed to parse JSON response")
 }
 
 #[tokio::test]
@@ -72,7 +74,10 @@ async fn test_full_gateway_flow() {
         .expect("failed to start mock server");
 
     // Verify it's healthy
-    assert!(manager.is_healthy("mock-echo").await, "mock server should be healthy");
+    assert!(
+        manager.is_healthy("mock-echo").await,
+        "mock server should be healthy"
+    );
 
     // -----------------------------------------------------------------------
     // 3. Build the axum router and spawn the HTTP server on a random port
@@ -133,12 +138,13 @@ async fn test_full_gateway_flow() {
     let tools = resp["result"]["tools"]
         .as_array()
         .expect("tools should be an array");
-    assert_eq!(tools.len(), 6, "global env should expose 6 plugmux management tools");
+    assert_eq!(
+        tools.len(),
+        6,
+        "global env should expose 6 plugmux management tools"
+    );
 
-    let tool_names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let tool_names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert!(tool_names.contains(&"plugmux__list_servers"));
     assert!(tool_names.contains(&"plugmux__enable_server"));
     assert!(tool_names.contains(&"plugmux__disable_server"));
@@ -169,10 +175,7 @@ async fn test_full_gateway_flow() {
         !tools.is_empty(),
         "test-env should expose at least one upstream tool"
     );
-    let tool_names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let tool_names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert!(
         tool_names.contains(&"mock-echo__echo"),
         "test-env should expose 'mock-echo__echo' tool from mock-echo server; got: {tool_names:?}"
@@ -198,13 +201,19 @@ async fn test_full_gateway_flow() {
     )
     .await;
 
-    assert!(resp["error"].is_null(), "echo tool call should not error: {resp}");
+    assert!(
+        resp["error"].is_null(),
+        "echo tool call should not error: {resp}"
+    );
     // Proxy layer returns the raw rmcp content array as the result
     let result = &resp["result"];
     let content = result
         .as_array()
         .unwrap_or_else(|| panic!("echo result should be a content array: {resp}"));
-    assert!(!content.is_empty(), "echo result content should not be empty: {resp}");
+    assert!(
+        !content.is_empty(),
+        "echo result content should not be empty: {resp}"
+    );
     let echo_text = content[0]["text"]
         .as_str()
         .unwrap_or_else(|| panic!("unexpected echo result format: {resp}"));
@@ -228,7 +237,10 @@ async fn test_full_gateway_flow() {
     )
     .await;
 
-    assert!(resp["error"].is_null(), "plugmux__list_servers should not error: {resp}");
+    assert!(
+        resp["error"].is_null(),
+        "plugmux__list_servers should not error: {resp}"
+    );
     let content_text = resp["result"]["content"][0]["text"]
         .as_str()
         .expect("should have text content");

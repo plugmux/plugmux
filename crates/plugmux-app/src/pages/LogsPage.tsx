@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Badge } from "@/components/ui/badge";
+import { StatusDot, type StatusVariant } from "@/components/ui/status-dot";
 import {
   Table,
   TableBody,
@@ -28,6 +29,12 @@ interface LogEntry {
   agent_info?: AgentInfo;
 }
 
+function logStatus(log: LogEntry): { variant: StatusVariant; label: string } {
+  if (log.error) return { variant: "error", label: log.error };
+  if (log.duration_ms > 5000) return { variant: "warning", label: "Slow response" };
+  return { variant: "success", label: "OK" };
+}
+
 export function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +58,7 @@ export function LogsPage() {
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-6">
+    <div className="flex flex-1 flex-col gap-4 overflow-hidden p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Logs</h1>
         <span className="text-xs text-muted-foreground">
@@ -68,52 +75,46 @@ export function LogsPage() {
       )}
 
       {logs.length > 0 && (
-        <div className="rounded-md border">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Env</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead className="text-right">Duration</TableHead>
-                <TableHead>Status</TableHead>
+              <TableRow className="border-border/60 bg-muted/60 hover:bg-muted/60">
+                <TableHead className="w-4 pl-2 pr-0"></TableHead>
+                <TableHead className="w-[70px] pl-1.5 pr-1">Time</TableHead>
+                <TableHead className="w-[80px] px-1">Env</TableHead>
+                <TableHead className="px-2">Method</TableHead>
+                <TableHead className="px-2">Agent</TableHead>
+                <TableHead className="px-2 text-right">ms</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {formatTime(log.timestamp)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      {log.env_id}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-mono">{log.method}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {log.agent_info?.agent_id || "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {log.duration_ms}ms
-                  </TableCell>
-                  <TableCell>
-                    {log.error ? (
-                      <Badge variant="destructive" className="text-xs">
-                        error
+              {logs.map((log) => {
+                const { variant, label } = logStatus(log);
+                return (
+                  <TableRow key={log.id} className="border-border/40">
+                    <TableCell className="w-4 pl-2 pr-0 text-center">
+                      <StatusDot status={variant} label={label} />
+                    </TableCell>
+                    <TableCell className="w-[70px] whitespace-nowrap pl-1.5 pr-1 text-muted-foreground">
+                      {formatTime(log.timestamp)}
+                    </TableCell>
+                    <TableCell className="w-[80px] px-1">
+                      <Badge variant="outline" className="max-w-[72px] truncate font-mono text-xs">
+                        {log.env_id}
                       </Badge>
-                    ) : (
-                      <Badge
-                        variant="secondary"
-                        className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
-                      >
-                        ok
-                      </Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="max-w-[180px] truncate px-2 font-mono">
+                      {log.method}
+                    </TableCell>
+                    <TableCell className="max-w-[100px] truncate px-2 text-muted-foreground">
+                      {log.agent_info?.agent_id || "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap px-2 text-right tabular-nums">
+                      {log.duration_ms}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

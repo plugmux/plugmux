@@ -27,12 +27,18 @@ mod tests {
 
     #[test]
     fn test_detect_claude_code() {
-        assert_eq!(detect_agent("Claude-Code/1.0"), Some("claude-code".to_string()));
+        assert_eq!(
+            detect_agent("Claude-Code/1.0"),
+            Some("claude-code".to_string())
+        );
     }
 
     #[test]
     fn test_detect_cursor() {
-        assert_eq!(detect_agent("Mozilla/5.0 Cursor/0.48"), Some("cursor".to_string()));
+        assert_eq!(
+            detect_agent("Mozilla/5.0 Cursor/0.48"),
+            Some("cursor".to_string())
+        );
     }
 
     #[test]

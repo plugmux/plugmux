@@ -4,18 +4,14 @@
 use async_trait::async_trait;
 use rmcp::{
     RoleClient, ServiceExt,
-    model::{
-        CallToolRequestParams,
-        GetPromptRequestParams,
-        ReadResourceRequestParams,
-    },
+    model::{CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams},
     service::RunningService,
     transport::StreamableHttpClientTransport,
 };
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use super::{McpClient, ProxyError, PromptInfo, ResourceInfo, ToolInfo};
+use super::{McpClient, PromptInfo, ProxyError, ResourceInfo, ToolInfo};
 
 /// An MCP client that communicates with an upstream server over HTTP
 /// (MCP Streamable HTTP transport — single POST endpoint with optional SSE streaming).
@@ -47,7 +43,8 @@ impl McpClient for HttpSseMcpClient {
         //   1. Sends `initialize` request with client info
         //   2. Receives server capabilities
         //   3. Sends `notifications/initialized`
-        let running = ().serve(transport)
+        let running = ()
+            .serve(transport)
             .await
             .map_err(|e| ProxyError::Transport(format!("MCP initialization failed: {e}")))?;
 
@@ -68,16 +65,16 @@ impl McpClient for HttpSseMcpClient {
             .into_iter()
             .map(|t| ToolInfo {
                 name: t.name.to_string(),
-                description: t
-                    .description
-                    .as_deref()
-                    .unwrap_or("")
-                    .to_string(),
+                description: t.description.as_deref().unwrap_or("").to_string(),
                 input_schema: serde_json::to_value(&*t.input_schema)
                     .unwrap_or(Value::Object(Default::default())),
-                output_schema: t.output_schema.as_ref()
+                output_schema: t
+                    .output_schema
+                    .as_ref()
                     .and_then(|s| serde_json::to_value(&**s).ok()),
-                annotations: t.annotations.as_ref()
+                annotations: t
+                    .annotations
+                    .as_ref()
                     .and_then(|a| serde_json::to_value(a).ok()),
             })
             .collect())
@@ -88,9 +85,7 @@ impl McpClient for HttpSseMcpClient {
         let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
 
         let params = match args {
-            Value::Object(map) => {
-                CallToolRequestParams::new(name.to_string()).with_arguments(map)
-            }
+            Value::Object(map) => CallToolRequestParams::new(name.to_string()).with_arguments(map),
             Value::Null => CallToolRequestParams::new(name.to_string()),
             other => {
                 let mut map = serde_json::Map::new();
@@ -190,9 +185,7 @@ impl McpClient for HttpSseMcpClient {
         let guard = self.service.lock().await;
         let svc = guard.as_ref().ok_or(ProxyError::NotInitialized)?;
         let params = match args {
-            Value::Object(map) => {
-                GetPromptRequestParams::new(name).with_arguments(map)
-            }
+            Value::Object(map) => GetPromptRequestParams::new(name).with_arguments(map),
             _ => GetPromptRequestParams::new(name),
         };
         let result = svc

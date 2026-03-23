@@ -1,19 +1,6 @@
 {
-  "version": 1,
+  "version": 2,
   "agents": [
-    {
-      "id": "claude-desktop",
-      "name": "Claude Desktop",
-      "icon": "claude",
-      "config_format": "json",
-      "mcp_key": "mcpServers",
-      "tier": "auto",
-      "config_paths": {
-        "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
-        "linux": "~/.config/Claude/claude_desktop_config.json",
-        "windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
-      }
-    },
     {
       "id": "claude-code",
       "name": "Claude Code",
@@ -22,19 +9,37 @@
       "mcp_key": "mcpServers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/.claude/settings.json",
-        "linux": "~/.claude/settings.json",
-        "windows": "%USERPROFILE%\\.claude\\settings.json"
+        "macos": "~/.claude.json",
+        "linux": "~/.claude.json",
+        "windows": "%USERPROFILE%\\.claude.json"
       }
     },
     {
-      "id": "chatgpt-desktop",
-      "name": "ChatGPT Desktop",
-      "icon": "chatgpt",
+      "id": "claude-desktop",
+      "name": "Claude Desktop",
+      "icon": "claude",
       "config_format": "json",
       "mcp_key": "mcpServers",
-      "tier": "manual",
-      "config_paths": null
+      "tier": "auto",
+      "supported_transports": ["stdio"],
+      "config_paths": {
+        "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+        "linux": "~/.config/Claude/claude_desktop_config.json",
+        "windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
+      }
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "icon": "cline",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        "windows": "%APPDATA%\\Code\\User\\globalStorage\\saoudrizwan.claude-dev\\settings\\cline_mcp_settings.json"
+      }
     },
     {
       "id": "codex",
@@ -47,6 +52,28 @@
         "macos": "~/.codex/config.toml",
         "linux": "~/.codex/config.toml",
         "windows": "%USERPROFILE%\\.codex\\config.toml"
+      }
+    },
+    {
+      "id": "continue",
+      "name": "Continue",
+      "icon": "continue",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "icon": "cursor",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.cursor/mcp.json",
+        "linux": "~/.cursor/mcp.json",
+        "windows": "%USERPROFILE%\\.cursor\\mcp.json"
       }
     },
     {
@@ -63,29 +90,73 @@
       }
     },
     {
-      "id": "antigravity",
-      "name": "Antigravity",
-      "icon": "antigravity",
+      "id": "goose",
+      "name": "Goose",
+      "icon": "goose",
+      "config_format": "json",
+      "mcp_key": "extensions",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "kiro",
+      "name": "Kiro",
+      "icon": "kiro",
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/.gemini/antigravity/mcp_config.json",
-        "linux": "~/.gemini/antigravity/mcp_config.json",
-        "windows": "%USERPROFILE%\\.gemini\\antigravity\\mcp_config.json"
+        "macos": "~/.kiro/settings/mcp.json",
+        "linux": "~/.kiro/settings/mcp.json",
+        "windows": "%USERPROFILE%\\.kiro\\settings\\mcp.json"
       }
     },
     {
-      "id": "cursor",
-      "name": "Cursor",
-      "icon": "cursor",
+      "id": "lmstudio",
+      "name": "LM Studio",
+      "icon": "lmstudio",
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/.cursor/mcp.json",
-        "linux": "~/.cursor/mcp.json",
-        "windows": "%USERPROFILE%\\.cursor\\mcp.json"
+        "macos": "~/.lmstudio/mcp.json",
+        "linux": "~/.lmstudio/mcp.json",
+        "windows": "%USERPROFILE%\\.lmstudio\\mcp.json"
+      }
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "icon": "opencode",
+      "config_format": "json",
+      "mcp_key": "mcp",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/.config/opencode/opencode.json",
+        "linux": "~/.config/opencode/opencode.json",
+        "windows": "%APPDATA%\\opencode\\opencode.json"
+      }
+    },
+    {
+      "id": "sema4ai",
+      "name": "Sema4.ai Studio",
+      "icon": "sema4ai",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
+    },
+    {
+      "id": "vscode",
+      "name": "VS Code",
+      "icon": "vscode",
+      "config_format": "json",
+      "mcp_key": "servers",
+      "tier": "auto",
+      "config_paths": {
+        "macos": "~/Library/Application Support/Code/User/mcp.json",
+        "linux": "~/.config/Code/User/mcp.json",
+        "windows": "%APPDATA%\\Code\\User\\mcp.json"
       }
     },
     {
@@ -102,17 +173,26 @@
       }
     },
     {
-      "id": "vscode",
-      "name": "VS Code",
-      "icon": "vscode",
+      "id": "zed",
+      "name": "Zed",
+      "icon": "zed",
       "config_format": "json",
-      "mcp_key": "mcpServers",
+      "mcp_key": "context_servers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/.vscode/mcp.json",
-        "linux": "~/.vscode/mcp.json",
-        "windows": "%USERPROFILE%\\.vscode\\mcp.json"
+        "macos": "~/Library/Application Support/Zed/settings.json",
+        "linux": "~/.config/zed/settings.json",
+        "windows": null
       }
+    },
+    {
+      "id": "chatgpt-desktop",
+      "name": "ChatGPT Desktop",
+      "icon": "chatgpt",
+      "config_format": "json",
+      "mcp_key": "mcpServers",
+      "tier": "manual",
+      "config_paths": null
     },
     {
       "id": "copilot-cli",
@@ -128,16 +208,16 @@
       }
     },
     {
-      "id": "zed",
-      "name": "Zed",
-      "icon": "zed",
+      "id": "antigravity",
+      "name": "Antigravity",
+      "icon": "antigravity",
       "config_format": "json",
-      "mcp_key": "context_servers",
+      "mcp_key": "mcpServers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/.config/zed/settings.json",
-        "linux": "~/.config/zed/settings.json",
-        "windows": null
+        "macos": "~/.gemini/antigravity/mcp_config.json",
+        "linux": "~/.gemini/antigravity/mcp_config.json",
+        "windows": "%USERPROFILE%\\.gemini\\antigravity\\mcp_config.json"
       }
     }
   ]

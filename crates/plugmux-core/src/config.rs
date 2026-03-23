@@ -81,6 +81,19 @@ pub struct Environment {
 // Path helpers
 // ---------------------------------------------------------------------------
 
+/// The global environment ID — always present, cannot be deleted.
+pub const GLOBAL_ENV: &str = "global";
+
+/// Build the plugmux gateway URL for a given port and environment.
+pub fn gateway_url(port: u16, env_id: &str) -> String {
+    format!("http://localhost:{port}/env/{env_id}")
+}
+
+/// Build the global management endpoint URL for a given port.
+pub fn global_url(port: u16) -> String {
+    gateway_url(port, GLOBAL_ENV)
+}
+
 /// Returns the plugmux config directory: `~/.config/plugmux/`.
 pub fn config_dir() -> PathBuf {
     let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config"));
@@ -317,7 +330,10 @@ mod tests {
 
         // global env should have been injected
         let global_env = find_environment(&cfg, "global");
-        assert!(global_env.is_some(), "global environment should be auto-created");
+        assert!(
+            global_env.is_some(),
+            "global environment should be auto-created"
+        );
         assert_eq!(global_env.unwrap().name, "Global");
     }
 
@@ -367,7 +383,10 @@ mod tests {
         let mut cfg = default_config();
         add_environment(&mut cfg, "Personal");
         let serialized = serde_json::to_string(&cfg).unwrap();
-        assert!(!serialized.contains("endpoint"), "Environment must not have an endpoint field");
+        assert!(
+            !serialized.contains("endpoint"),
+            "Environment must not have an endpoint field"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -382,7 +401,10 @@ mod tests {
         let env = find_environment_mut(&mut cfg, "staging").unwrap();
         env.servers.push("redis".to_string());
 
-        assert_eq!(find_environment(&cfg, "staging").unwrap().servers, vec!["redis"]);
+        assert_eq!(
+            find_environment(&cfg, "staging").unwrap().servers,
+            vec!["redis"]
+        );
     }
 
     // -----------------------------------------------------------------------

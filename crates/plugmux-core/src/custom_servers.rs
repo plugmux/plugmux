@@ -428,7 +428,9 @@ mod tests {
 
         {
             let mut store = CustomServerStore::load_or_default(path.clone());
-            store.add(make_server("internal-db", "Internal DB"), &catalog).unwrap();
+            store
+                .add(make_server("internal-db", "Internal DB"), &catalog)
+                .unwrap();
             store.save().unwrap();
         }
 

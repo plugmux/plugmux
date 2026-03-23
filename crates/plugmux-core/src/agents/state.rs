@@ -52,8 +52,7 @@ impl AgentState {
         let path = config_dir.join(STATE_FILE);
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize agent state: {e}"))?;
-        std::fs::write(&path, json)
-            .map_err(|e| format!("Failed to write {}: {e}", path.display()))
+        std::fs::write(&path, json).map_err(|e| format!("Failed to write {}: {e}", path.display()))
     }
 
     /// Adds an agent entry. Replaces any existing entry with the same id.
@@ -118,7 +117,7 @@ mod tests {
             id: "claude-code".to_string(),
             source: AgentSource::Auto,
             name: None,
-            config_path: Some("/home/user/.claude/settings.json".to_string()),
+            config_path: Some("/home/user/.claude.json".to_string()),
             config_format: Some(ConfigFormat::Json),
             mcp_key: Some("mcpServers".to_string()),
         });
@@ -132,13 +131,10 @@ mod tests {
         assert_eq!(loaded.agents[0].source, AgentSource::Auto);
         assert_eq!(
             loaded.agents[0].config_path,
-            Some("/home/user/.claude/settings.json".to_string())
+            Some("/home/user/.claude.json".to_string())
         );
         assert_eq!(loaded.agents[0].config_format, Some(ConfigFormat::Json));
-        assert_eq!(
-            loaded.agents[0].mcp_key,
-            Some("mcpServers".to_string())
-        );
+        assert_eq!(loaded.agents[0].mcp_key, Some("mcpServers".to_string()));
         assert_eq!(loaded.dismissed_agents, vec!["old-agent"]);
     }
 
@@ -161,7 +157,10 @@ mod tests {
         state.add_agent(make_entry("cursor", AgentSource::Custom));
 
         assert_eq!(state.agents.len(), 1);
-        assert_eq!(state.get_agent("cursor").unwrap().source, AgentSource::Custom);
+        assert_eq!(
+            state.get_agent("cursor").unwrap().source,
+            AgentSource::Custom
+        );
     }
 
     #[test]
@@ -211,11 +210,7 @@ mod tests {
         state.dismiss_agent("x"); // second call shouldn't duplicate
 
         assert_eq!(
-            state
-                .dismissed_agents
-                .iter()
-                .filter(|d| *d == "x")
-                .count(),
+            state.dismissed_agents.iter().filter(|d| *d == "x").count(),
             1
         );
     }
@@ -223,8 +218,7 @@ mod tests {
     #[test]
     fn test_load_returns_default_on_invalid_json() {
         let tmp = TempDir::new().unwrap();
-        std::fs::write(tmp.path().join("agents_state.json"), "not valid json")
-            .unwrap();
+        std::fs::write(tmp.path().join("agents_state.json"), "not valid json").unwrap();
 
         let state = AgentState::load(tmp.path());
         assert!(state.agents.is_empty());

@@ -1,9 +1,9 @@
 //! Request/response logging to embedded DB.
 
-use std::sync::Arc;
-use serde_json::Value;
 use crate::db::Db;
 use crate::db::logs::{AgentInfo, LogEntry, write_log};
+use serde_json::Value;
+use std::sync::Arc;
 
 pub fn log_request(
     db: &Arc<Db>,

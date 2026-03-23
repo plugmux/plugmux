@@ -154,8 +154,9 @@ mod tests {
         let catalog = make_catalog();
 
         let custom_store = {
-            let mut store =
-                CustomServerStore::load_or_default(std::path::PathBuf::from("/tmp/test_custom.json"));
+            let mut store = CustomServerStore::load_or_default(std::path::PathBuf::from(
+                "/tmp/test_custom.json",
+            ));
             // The store may have leftover state from a previous test run on disk, so we
             // reconstruct it purely in-memory by using a temp path that won't exist.
             store
@@ -335,6 +336,9 @@ mod tests {
         // Must come from catalog, not custom.
         assert_eq!(result.source, ServerSource::Catalog);
         let config = result.config.unwrap();
-        assert_eq!(config.name, "Figma", "catalog name should win over custom name");
+        assert_eq!(
+            config.name, "Figma",
+            "catalog name should win over custom name"
+        );
     }
 }

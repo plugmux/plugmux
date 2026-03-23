@@ -80,10 +80,7 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("  Environments:");
         for env in &cfg.environments {
-            println!(
-                "    {} -> http://127.0.0.1:{port}/env/{}",
-                env.name, env.id
-            );
+            println!("    {} -> http://127.0.0.1:{port}/env/{}", env.name, env.id);
         }
     }
     println!();

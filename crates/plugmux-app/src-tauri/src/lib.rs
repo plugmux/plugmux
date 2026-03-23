@@ -126,8 +126,12 @@ pub fn run() {
 
             // Start config file watcher (keep watcher alive for app lifetime)
             match watcher::start_config_watcher(app.handle().clone(), engine_for_watcher) {
-                Ok(w) => { app.manage(w); }
-                Err(e) => { tracing::warn!(error = %e, "config watcher not available"); }
+                Ok(w) => {
+                    app.manage(w);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "config watcher not available");
+                }
             }
 
             Ok(())

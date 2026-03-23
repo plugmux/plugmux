@@ -1,8 +1,8 @@
 pub mod agents;
 pub mod catalog;
-pub mod db;
 pub mod config;
 pub mod custom_servers;
+pub mod db;
 pub mod environment;
 pub mod gateway;
 pub mod health;

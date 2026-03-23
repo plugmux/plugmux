@@ -34,18 +34,14 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
     let config_path = config::config_path();
     let custom_path = config::config_dir().join("custom_servers.json");
 
-    let old_json: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&old_path)?)?;
+    let old_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&old_path)?)?;
 
     let mut custom_servers: Vec<ServerConfig> = Vec::new();
     let mut environments: Vec<Environment> = Vec::new();
 
     // 1. main.servers → "default" environment
-    let main_server_ids = process_servers(
-        &old_json["main"]["servers"],
-        catalog,
-        &mut custom_servers,
-    );
+    let main_server_ids =
+        process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
     environments.push(Environment {
         id: "default".to_string(),
         name: "Default".to_string(),
@@ -57,11 +53,7 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
         for env in envs {
             let id = env["id"].as_str().unwrap_or("unnamed").to_string();
             let name = env["name"].as_str().unwrap_or(&id).to_string();
-            let server_ids = process_servers(
-                &env["servers"],
-                catalog,
-                &mut custom_servers,
-            );
+            let server_ids = process_servers(&env["servers"], catalog, &mut custom_servers);
             environments.push(Environment {
                 id,
                 name,
@@ -102,17 +94,14 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
 fn match_catalog(server: &serde_json::Value, catalog: &CatalogRegistry) -> Option<String> {
     for entry in catalog.list_servers() {
         // Match by command (stdio servers)
-        if let (Some(cmd), Some(entry_cmd)) =
-            (server["command"].as_str(), entry.command.as_deref())
+        if let (Some(cmd), Some(entry_cmd)) = (server["command"].as_str(), entry.command.as_deref())
         {
             if cmd == entry_cmd {
                 return Some(entry.id.clone());
             }
         }
         // Match by url (HTTP servers)
-        if let (Some(url), Some(entry_url)) =
-            (server["url"].as_str(), entry.url.as_deref())
-        {
+        if let (Some(url), Some(entry_url)) = (server["url"].as_str(), entry.url.as_deref()) {
             if url == entry_url {
                 return Some(entry.id.clone());
             }
@@ -232,7 +221,10 @@ mod tests {
         // new config.json does NOT exist
 
         let result = needs_migration_in(dir.path(), dir.path());
-        assert!(result, "should need migration when plugmux.json exists and config.json does not");
+        assert!(
+            result,
+            "should need migration when plugmux.json exists and config.json does not"
+        );
     }
 
     #[test]
@@ -242,7 +234,10 @@ mod tests {
         fs::write(dir.path().join("config.json"), "{}").unwrap();
 
         let result = needs_migration_in(dir.path(), dir.path());
-        assert!(!result, "should not need migration when config.json already exists");
+        assert!(
+            !result,
+            "should not need migration when config.json already exists"
+        );
     }
 
     #[test]
@@ -251,7 +246,10 @@ mod tests {
         // neither file exists
 
         let result = needs_migration_in(dir.path(), dir.path());
-        assert!(!result, "should not need migration when plugmux.json does not exist");
+        assert!(
+            !result,
+            "should not need migration when plugmux.json does not exist"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -331,7 +329,11 @@ mod tests {
 
         // Should have default + my-project
         assert_eq!(cfg.environments.len(), 2);
-        let proj_env = cfg.environments.iter().find(|e| e.id == "my-project").unwrap();
+        let proj_env = cfg
+            .environments
+            .iter()
+            .find(|e| e.id == "my-project")
+            .unwrap();
         assert_eq!(proj_env.name, "My Project");
         assert!(proj_env.servers.contains(&"custom-api".to_string()));
     }
@@ -421,7 +423,10 @@ mod tests {
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
             serde_json::from_str(&fs::read_to_string(&custom_path).unwrap()).unwrap();
-        assert!(custom.servers.is_empty(), "url-matched server must not appear in custom_servers");
+        assert!(
+            custom.servers.is_empty(),
+            "url-matched server must not appear in custom_servers"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -455,7 +460,11 @@ mod tests {
         let custom: CustomServersData =
             serde_json::from_str(&fs::read_to_string(&custom_path).unwrap()).unwrap();
 
-        assert_eq!(custom.servers.len(), 1, "unmatched server should be in custom_servers");
+        assert_eq!(
+            custom.servers.len(),
+            1,
+            "unmatched server should be in custom_servers"
+        );
         assert_eq!(custom.servers[0].id, "my-internal-api");
         assert_eq!(custom.servers[0].name, "Internal API");
 
@@ -574,7 +583,10 @@ mod tests {
         let catalog = make_catalog();
         // Must not error out due to `enabled` field
         let result = migrate_in(dir.path(), &catalog);
-        assert!(result.is_ok(), "migration should succeed even with `enabled` field present");
+        assert!(
+            result.is_ok(),
+            "migration should succeed even with `enabled` field present"
+        );
 
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
@@ -583,7 +595,10 @@ mod tests {
         assert_eq!(custom.servers.len(), 1);
         assert_eq!(custom.servers[0].id, "my-server");
         let serialized = serde_json::to_string(&custom.servers[0]).unwrap();
-        assert!(!serialized.contains("enabled"), "serialized ServerConfig must not contain `enabled`");
+        assert!(
+            !serialized.contains("enabled"),
+            "serialized ServerConfig must not contain `enabled`"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -627,8 +642,15 @@ mod tests {
 
         let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
         // Both match "filesystem" in the catalog — only one reference should appear
-        let fs_count = default_env.servers.iter().filter(|s| *s == "filesystem").count();
-        assert_eq!(fs_count, 1, "deduplicated: filesystem should appear only once");
+        let fs_count = default_env
+            .servers
+            .iter()
+            .filter(|s| *s == "filesystem")
+            .count();
+        assert_eq!(
+            fs_count, 1,
+            "deduplicated: filesystem should appear only once"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -649,17 +671,13 @@ mod tests {
         let config_path = base_dir.join("config.json");
         let custom_path = base_dir.join("custom_servers.json");
 
-        let old_json: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&old_path)?)?;
+        let old_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&old_path)?)?;
 
         let mut custom_servers: Vec<ServerConfig> = Vec::new();
         let mut environments: Vec<Environment> = Vec::new();
 
-        let main_server_ids = process_servers(
-            &old_json["main"]["servers"],
-            catalog,
-            &mut custom_servers,
-        );
+        let main_server_ids =
+            process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
         environments.push(Environment {
             id: "default".to_string(),
             name: "Default".to_string(),
@@ -670,11 +688,7 @@ mod tests {
             for env in envs {
                 let id = env["id"].as_str().unwrap_or("unnamed").to_string();
                 let name = env["name"].as_str().unwrap_or(&id).to_string();
-                let server_ids = process_servers(
-                    &env["servers"],
-                    catalog,
-                    &mut custom_servers,
-                );
+                let server_ids = process_servers(&env["servers"], catalog, &mut custom_servers);
                 environments.push(Environment {
                     id,
                     name,

@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::proxy::http_sse::HttpSseMcpClient;
 use crate::proxy::stdio::StdioMcpClient;
-use crate::proxy::{McpClient, ProxyError, ToolInfo, ResourceInfo, PromptInfo};
+use crate::proxy::{McpClient, PromptInfo, ProxyError, ResourceInfo, ToolInfo};
 use crate::server::{HealthStatus, ServerConfig, Transport};
 
 /// A running MCP server together with its configuration and health status.
@@ -59,9 +59,7 @@ impl ServerManager {
                 let url = config
                     .url
                     .as_deref()
-                    .ok_or_else(|| {
-                        ProxyError::Transport("http transport requires a url".into())
-                    })?
+                    .ok_or_else(|| ProxyError::Transport("http transport requires a url".into()))?
                     .to_string();
                 Box::new(HttpSseMcpClient::new(url))
             }
@@ -84,9 +82,9 @@ impl ServerManager {
     /// Stop a server: shut down the client and remove it from the managed set.
     pub async fn stop_server(&self, id: &str) -> Result<(), ProxyError> {
         let mut map = self.servers.write().await;
-        let mut managed = map.remove(id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {id}"))
-        })?;
+        let mut managed = map
+            .remove(id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {id}")))?;
 
         info!(server_id = %id, "stopping server");
         managed.client.shutdown().await?;
@@ -97,9 +95,9 @@ impl ServerManager {
     /// List all tools exposed by a specific server.
     pub async fn list_tools(&self, server_id: &str) -> Result<Vec<ToolInfo>, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.list_tools().await
     }
 
@@ -111,45 +109,50 @@ impl ServerManager {
         args: Value,
     ) -> Result<Value, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.call_tool(tool_name, args).await
     }
 
     /// List all resources exposed by a specific server.
     pub async fn list_resources(&self, server_id: &str) -> Result<Vec<ResourceInfo>, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.list_resources().await
     }
 
     /// Read a resource from a specific server.
     pub async fn read_resource(&self, server_id: &str, uri: &str) -> Result<Value, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.read_resource(uri).await
     }
 
     /// List all prompts exposed by a specific server.
     pub async fn list_prompts(&self, server_id: &str) -> Result<Vec<PromptInfo>, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.list_prompts().await
     }
 
     /// Get a prompt from a specific server.
-    pub async fn get_prompt(&self, server_id: &str, name: &str, args: Value) -> Result<Value, ProxyError> {
+    pub async fn get_prompt(
+        &self,
+        server_id: &str,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
+        let managed = map
+            .get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
         managed.client.get_prompt(name, args).await
     }
 

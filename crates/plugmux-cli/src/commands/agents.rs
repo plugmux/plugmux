@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use plugmux_core::agents::{
-    AgentRegistry, AgentState, AgentStatus, detect_all, connect_agent, disconnect_agent,
+    AgentRegistry, AgentState, AgentStatus, connect_agent, detect_all, disconnect_agent,
     disconnect_and_restore,
 };
 use plugmux_core::config;

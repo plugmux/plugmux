@@ -69,7 +69,7 @@ pub fn run(cmd: &CustomCommands) -> Result<(), Box<dyn std::error::Error>> {
                 other => {
                     return Err(
                         format!("unknown transport: {other} (use 'stdio' or 'http')").into(),
-                    )
+                    );
                 }
             };
 

@@ -3,8 +3,7 @@ use crate::config::{self, Config, ConfigError};
 /// Get the list of server IDs for an environment.
 /// Returns `None` if the environment does not exist.
 pub fn get_server_ids(config: &Config, env_id: &str) -> Option<Vec<String>> {
-    config::find_environment(config, env_id)
-        .map(|env| env.servers.clone())
+    config::find_environment(config, env_id).map(|env| env.servers.clone())
 }
 
 /// Add a server ID to an environment (if not already present).

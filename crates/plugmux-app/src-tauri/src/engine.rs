@@ -118,7 +118,10 @@ impl Engine {
 
         // Start health checker
         let health_manager = self.manager.clone();
-        tokio::spawn(start_health_checker(health_manager, Duration::from_secs(30)));
+        tokio::spawn(start_health_checker(
+            health_manager,
+            Duration::from_secs(30),
+        ));
 
         // Start HTTP server
         let config = self.config.clone();
@@ -126,14 +129,14 @@ impl Engine {
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
 
         let addr = format!("127.0.0.1:{port}");
-        let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
-            format!("Port {port} is already in use: {e}")
-        })?;
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(|e| format!("Port {port} is already in use: {e}"))?;
 
         info!("plugmux gateway listening on http://{addr}");
 
-        let db = Db::open(&Db::default_path())
-            .map_err(|e| format!("failed to open database: {e}"))?;
+        let db =
+            Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
         *self.db.write().await = Some(db.clone());
         let router = router::build_router(config, manager, Some(db));
         tokio::spawn(async move {

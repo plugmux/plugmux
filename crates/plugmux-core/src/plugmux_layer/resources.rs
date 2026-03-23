@@ -11,33 +11,25 @@ pub fn list_resources() -> Vec<ResourceInfo> {
         ResourceInfo {
             uri: "plugmux://servers".to_string(),
             name: "servers".to_string(),
-            description: Some(
-                "All servers with health and connection status".to_string(),
-            ),
+            description: Some("All servers with health and connection status".to_string()),
             mime_type: Some("application/json".to_string()),
         },
         ResourceInfo {
             uri: "plugmux://environments".to_string(),
             name: "environments".to_string(),
-            description: Some(
-                "All environments with their server lists".to_string(),
-            ),
+            description: Some("All environments with their server lists".to_string()),
             mime_type: Some("application/json".to_string()),
         },
         ResourceInfo {
             uri: "plugmux://agents".to_string(),
             name: "agents".to_string(),
-            description: Some(
-                "Connected and detected agents".to_string(),
-            ),
+            description: Some("Connected and detected agents".to_string()),
             mime_type: Some("application/json".to_string()),
         },
         ResourceInfo {
             uri: "plugmux://logs/recent".to_string(),
             name: "logs/recent".to_string(),
-            description: Some(
-                "Recent gateway activity log".to_string(),
-            ),
+            description: Some("Recent gateway activity log".to_string()),
             mime_type: Some("application/json".to_string()),
         },
     ]

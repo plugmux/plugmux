@@ -1,10 +1,10 @@
 //! Log entry storage.
 
-use std::sync::Arc;
+use super::Db;
 use redb::{ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use super::Db;
+use std::sync::Arc;
 
 pub const LOGS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("logs");
 
@@ -47,7 +47,10 @@ impl LogEntry {
 
 pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), redb::Error> {
     let json = serde_json::to_string(entry).map_err(|e| {
-        redb::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        redb::Error::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
     })?;
     let write_txn = db.inner.begin_write()?;
     {
