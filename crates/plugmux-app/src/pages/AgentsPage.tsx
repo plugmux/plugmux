@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Plus, RefreshCw, X } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
 import { AddAgentDialog } from "@/components/agents/AddAgentDialog";
 import { useAgents } from "@/hooks/useAgents";
 
 export function AgentsPage() {
-  const { agents, loading, error, clearError, connect, disconnect, dismiss, reload } =
+  const { agents, loading, connect, disconnect, dismiss, reload } =
     useAgents();
 
   const [addAgentOpen, setAddAgentOpen] = useState(false);
@@ -33,16 +33,6 @@ export function AgentsPage() {
 
   return (
     <div className="space-y-6 px-6 pt-4 pb-6">
-      {/* Error banner */}
-      {error && (
-        <div className="flex items-center justify-between rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
-          <span>{error}</span>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={clearError}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

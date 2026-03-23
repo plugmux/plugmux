@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import {
   detectAgents,
   getAgentRegistry,
@@ -11,7 +12,6 @@ import {
 export function useAgents() {
   const [agents, setAgents] = useState<DetectedAgent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -38,7 +38,6 @@ export function useAgents() {
   );
   const hasConnected = connectedAgents.length > 0;
 
-  // Optimistic update helper
   function optimisticUpdate(id: string, status: DetectedAgent["status"]) {
     setAgents((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a)),
@@ -50,8 +49,6 @@ export function useAgents() {
     loading,
     connectedAgents,
     hasConnected,
-    error,
-    clearError: () => setError(null),
     reload,
     connect: async (id: string) => {
       const prev = agents.find((a) => a.id === id);
@@ -60,9 +57,10 @@ export function useAgents() {
         await connectAgent(id);
         await reload();
       } catch (e) {
-        // Revert on error
         if (prev) optimisticUpdate(id, prev.status);
-        setError(e instanceof Error ? e.message : String(e));
+        toast.error("Failed to connect agent", {
+          description: e instanceof Error ? e.message : String(e),
+        });
       }
     },
     disconnect: async (id: string, restore: boolean) => {
@@ -73,7 +71,9 @@ export function useAgents() {
         await reload();
       } catch (e) {
         if (prev) optimisticUpdate(id, prev.status);
-        setError(e instanceof Error ? e.message : String(e));
+        toast.error("Failed to disconnect agent", {
+          description: e instanceof Error ? e.message : String(e),
+        });
       }
     },
     dismiss: async (id: string) => {

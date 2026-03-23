@@ -6,6 +6,7 @@ import { PresetsPage } from "@/pages/PresetsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { CreateEnvironmentDialog } from "@/components/environments/CreateEnvironmentDialog";
+import { Toaster } from "@/components/ui/sonner";
 
 function App() {
   const [activePage, setActivePage] = useState("agents");
@@ -46,6 +47,7 @@ function App() {
           setActivePage(`env:${envId}`);
         }}
       />
+      <Toaster />
     </Layout>
   );
 }
