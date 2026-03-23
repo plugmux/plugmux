@@ -115,17 +115,31 @@ Separate from existing `proxy/` which handles individual client connections. The
 
 ### Resource Aggregation & Routing
 
+**URI rewriting rule:** All backend resource URIs are wrapped with a plugmux prefix to avoid conflicts with real URI schemes (`file://`, `https://`, etc.):
+
+```
+Original from backend:   file:///logs/app.log
+Rewritten by plugmux:    plugmux-res://figma/file:///logs/app.log
+                          ^scheme       ^sid  ^original URI preserved
+```
+
+Format: `plugmux-res://{server_id}/{original_uri}`
+
+This is unambiguous — `plugmux-res://` is a synthetic scheme that never conflicts with real URIs. On `resources/read`, plugmux strips the `plugmux-res://{server_id}/` prefix and forwards the original URI to the backend.
+
 **`resources/list`** — for each backend server:
 1. Call `list_resources()` on the backend
-2. Prefix URIs: `{server_id}://{original_path}` (or preserve if already namespaced)
+2. Rewrite each URI: `plugmux-res://{server_id}/{original_uri}`
 3. Merge into flat list
 
 **`resources/read`** — parse the URI:
-1. Extract server_id from URI prefix
-2. Forward to backend with original URI
-3. Return response as-is
+1. Strip `plugmux-res://` prefix
+2. Extract `server_id` (segment before first `/` after scheme)
+3. Reconstruct original URI (everything after `{server_id}/`)
+4. Forward to backend with original URI
+5. Return response as-is
 
-**`resources/subscribe`** — forward subscription to the appropriate backend, relay `notifications/resources/updated` back to agent.
+**`resources/subscribe`** — forward subscription to the appropriate backend, relay `notifications/resources/updated` back to agent (rewriting URIs in the notification).
 
 ### Prompt Aggregation & Routing
 
@@ -139,17 +153,29 @@ Apps are tools with `annotations.ui` metadata. The proxy layer handles them auto
 
 ### Pass-Through Relay
 
-**Sampling** (server → agent direction):
+**Transport requirement:** Sampling and elicitation are server-initiated — the backend server sends a request to plugmux, which must forward it to the agent. This requires upgrading the gateway from plain HTTP POST to **Streamable HTTP with SSE** (Server-Sent Events). The agent opens an SSE stream to plugmux, which plugmux uses to push server-initiated messages.
+
+This is the standard MCP Streamable HTTP transport:
+- Agent → plugmux: HTTP POST (requests)
+- Plugmux → agent: SSE stream (notifications, sampling requests, elicitation requests)
+
+**Phase note:** SSE transport upgrade is required for sampling/elicitation relay. Roots forwarding works over plain HTTP POST (agent-initiated). Implementation priority:
+1. Roots forwarding (works now, agent → server direction)
+2. SSE transport upgrade (enables server → agent direction)
+3. Sampling relay (depends on SSE)
+4. Elicitation relay (depends on SSE)
+
+**Sampling** (server → agent direction, requires SSE):
 - Backend server sends `sampling/createMessage` to plugmux
-- Plugmux relays to the connected agent
-- Agent responds → plugmux relays back to backend
+- Plugmux relays to the connected agent via SSE
+- Agent responds via HTTP POST → plugmux relays back to backend
 
-**Elicitation** (server → agent → user direction):
+**Elicitation** (server → agent → user direction, requires SSE):
 - Backend server sends `elicitation/create` to plugmux
-- Plugmux relays to agent → agent shows UI to user
-- User responds → plugmux relays back to backend
+- Plugmux relays to agent via SSE → agent shows UI to user
+- User responds via HTTP POST → plugmux relays back to backend
 
-**Roots** (agent → server direction):
+**Roots** (agent → server direction, works over HTTP POST):
 - Agent sends `notifications/roots/updated` or roots during `initialize`
 - Plugmux broadcasts to all backend servers in the environment
 - Plugmux also stores roots locally for agent/session tracking
@@ -172,9 +198,18 @@ async fn get_prompt(&self, name: &str, args: Value) -> Result<Value, ProxyError>
 async fn send_roots(&self, roots: Value) -> Result<(), ProxyError>;
 ```
 
-### New Data Types
+### Updated & New Data Types
 
 ```rust
+// Existing ToolInfo — extended with optional fields
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+    pub output_schema: Option<Value>,  // NEW — for apps and structured output
+    pub annotations: Option<Value>,    // NEW — includes UI metadata for apps
+}
+
 pub struct ResourceInfo {
     pub uri: String,
     pub name: String,
@@ -371,7 +406,7 @@ The `plugmux` server is not stored in config — it's injected at runtime. When 
 | Primitive | Pattern | Example |
 |-----------|---------|---------|
 | Tools | `{server_id}__{tool_name}` | `figma__get_screenshot` |
-| Resources | `{server_id}://{path}` | `figma://designs/recent` |
+| Resources | `plugmux-res://{server_id}/{original_uri}` | `plugmux-res://figma/file:///designs/recent` |
 | Prompts | `{server_id}__{prompt_name}` | `figma__design-to-code` |
 | Apps | Same as tools (apps are tools with UI annotations) | `figma__dashboard` |
 
