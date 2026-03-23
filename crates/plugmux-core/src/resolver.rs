@@ -153,9 +153,8 @@ mod tests {
     #[allow(dead_code)]
     fn make_resolver() -> ServerResolver {
         let catalog = make_catalog();
-        let custom_store = CustomServerStore::load_or_default(std::path::PathBuf::from(
-            "/tmp/test_custom.json",
-        ));
+        let custom_store =
+            CustomServerStore::load_or_default(std::path::PathBuf::from("/tmp/test_custom.json"));
         let custom = Arc::new(std::sync::RwLock::new(custom_store));
         ServerResolver::new(catalog, custom)
     }
