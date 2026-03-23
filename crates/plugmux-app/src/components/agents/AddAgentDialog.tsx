@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { addCustomAgent } from "@/lib/commands";
+import { getPort } from "@/lib/commands";
 
 interface AddAgentDialogProps {
   open: boolean;
@@ -17,37 +17,31 @@ export function AddAgentDialog({
   onAdded,
 }: AddAgentDialogProps) {
   const [name, setName] = useState("");
-  const [configPath, setConfigPath] = useState("");
-  const [configFormat, setConfigFormat] = useState<"json" | "toml">("json");
-  const [mcpKey, setMcpKey] = useState("mcpServers");
-  const [adding, setAdding] = useState(false);
+  const [port, setPort] = useState(4242);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName("");
-      setConfigPath("");
-      setConfigFormat("json");
-      setMcpKey("mcpServers");
+      setCopied(false);
+      getPort().then(setPort);
     }
   }, [open]);
 
-  async function handleAdd() {
-    if (!name.trim() || !configPath.trim()) return;
-    setAdding(true);
-    try {
-      await addCustomAgent(
-        name.trim(),
-        configPath.trim(),
-        configFormat,
-        mcpKey.trim() || "mcpServers",
-      );
-      onAdded();
-      onOpenChange(false);
-    } catch {
-      // stay open on error
-    } finally {
-      setAdding(false);
-    }
+  const snippet = JSON.stringify(
+    {
+      plugmux: {
+        url: `http://localhost:${port}/env/default`,
+      },
+    },
+    null,
+    2,
+  );
+
+  function handleCopy() {
+    navigator.clipboard.writeText(snippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -55,73 +49,56 @@ export function AddAgentDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Add Custom Agent"
-      description="Add an agent that's not in the registry by providing its config file details."
+      description="Add plugmux MCP to any agent that supports the Model Context Protocol."
       size="md"
       footer={
         <div className="flex w-full justify-end">
-          <Button
-            onClick={handleAdd}
-            disabled={adding || !name.trim() || !configPath.trim()}
-          >
-            {adding && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            Add
+          <Button onClick={() => { onAdded(); onOpenChange(false); }}>
+            Done
           </Button>
         </div>
       }
     >
       <div className="space-y-4 py-2">
         <div className="space-y-1.5">
-          <label htmlFor="custom-agent-name" className="text-sm font-medium">
-            Name
+          <label htmlFor="agent-name" className="text-sm font-medium">
+            Agent name
           </label>
           <Input
-            id="custom-agent-name"
+            id="agent-name"
             placeholder="e.g. My Custom Agent"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            autoFocus
           />
         </div>
+
         <div className="space-y-1.5">
-          <label htmlFor="custom-config-path" className="text-sm font-medium">
-            Config file path
-          </label>
-          <Input
-            id="custom-config-path"
-            placeholder="e.g. ~/.config/myagent/config.json"
-            value={configPath}
-            onChange={(e) => setConfigPath(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <span className="text-sm font-medium">Config format</span>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => setConfigFormat("json")}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${configFormat === "json" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"}`}
+          <p className="text-sm font-medium">
+            Add this to the agent's <code className="rounded bg-muted px-1 py-0.5 text-xs">mcpServers</code> configuration:
+          </p>
+          <div className="relative">
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+              {snippet}
+            </pre>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-2 h-7 w-7"
+              onClick={handleCopy}
             >
-              JSON
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfigFormat("toml")}
-              className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${configFormat === "toml" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"}`}
-            >
-              TOML
-            </button>
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-green-500" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
           </div>
         </div>
-        <div className="space-y-1.5">
-          <label htmlFor="custom-mcp-key" className="text-sm font-medium">
-            MCP key
-          </label>
-          <Input
-            id="custom-mcp-key"
-            placeholder="mcpServers"
-            value={mcpKey}
-            onChange={(e) => setMcpKey(e.target.value)}
-          />
-        </div>
+
+        <p className="text-xs text-muted-foreground">
+          After adding the configuration, save the file and restart the agent. Use the refresh button on the Agents page to verify the connection.
+        </p>
       </div>
     </Modal>
   );

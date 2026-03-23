@@ -103,8 +103,8 @@ export function AgentTable({
   onDisable,
   onDelete,
 }: AgentTableProps) {
-  const installed = agents.filter((a) => a.installed);
-  const notInstalled = agents.filter((a) => !a.installed);
+  const installed = agents.filter((a) => a.installed || a.source === "custom");
+  const notInstalled = agents.filter((a) => !a.installed && a.source !== "custom");
 
   return (
     <TooltipProvider delayDuration={300}>
