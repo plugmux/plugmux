@@ -1,4 +1,4 @@
-import { Settings2, Trash2 } from "lucide-react";
+import { Download, Settings2, Trash2 } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -27,21 +27,28 @@ interface AgentRowProps {
   onConnect: (id: string) => void;
   onDisable: (agent: DetectedAgent) => void;
   onDelete: (agent: DetectedAgent) => void;
+  onInstall: (agent: DetectedAgent) => void;
   onManualSetup: (agent: DetectedAgent) => void;
 }
 
-type AgentTableProps = { agents: DetectedAgent[] } & Omit<AgentRowProps, "agent">;
+type AgentTableProps = { agents: DetectedAgent[] } & Omit<
+  AgentRowProps,
+  "agent"
+>;
 
 function AgentRow({
   agent,
   onConnect,
   onDisable,
   onDelete,
+  onInstall,
   onManualSetup,
 }: AgentRowProps) {
   const isConnected = agent.status === "green" || agent.status === "yellow";
   const isInstalled = agent.installed || agent.source === "custom";
-  const isManual = !isInstalled && agent.source !== "custom";
+  const isNotDetected = !isInstalled && agent.tier === "auto";
+  const isManualOnly = agent.tier === "manual";
+  const dimmed = !isInstalled && agent.source !== "custom";
 
   return (
     <div className="flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5">
@@ -56,12 +63,12 @@ function AgentRow({
         </TooltipContent>
       </Tooltip>
 
-      <span className={isManual ? "opacity-40" : ""}>
+      <span className={dimmed ? "opacity-40" : ""}>
         <AgentIcon icon={agent.icon} name={agent.name} />
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className={`text-sm font-medium ${isManual ? "opacity-40" : ""}`}>
+        <p className={`text-sm font-medium ${dimmed ? "opacity-40" : ""}`}>
           {agent.name}
         </p>
         {isInstalled && agent.config_path && (
@@ -71,6 +78,7 @@ function AgentRow({
         )}
       </div>
 
+      {/* Detected + installed → toggle (+ delete for custom) */}
       {isInstalled && (
         <>
           {agent.source === "custom" && (
@@ -97,7 +105,21 @@ function AgentRow({
         </>
       )}
 
-      {isManual && (
+      {/* Auto tier but not detected → Install button */}
+      {isNotDetected && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0 text-xs"
+          onClick={() => onInstall(agent)}
+        >
+          <Download className="mr-1 h-3 w-3" />
+          Install
+        </Button>
+      )}
+
+      {/* Manual only → Setup button */}
+      {!isInstalled && isManualOnly && (
         <Button
           variant="outline"
           size="sm"
@@ -117,10 +139,13 @@ export function AgentTable({
   onConnect,
   onDisable,
   onDelete,
+  onInstall,
   onManualSetup,
 }: AgentTableProps) {
   const installed = agents.filter((a) => a.installed || a.source === "custom");
-  const notInstalled = agents.filter((a) => !a.installed && a.source !== "custom");
+  const notInstalled = agents.filter(
+    (a) => !a.installed && a.source !== "custom",
+  );
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -137,6 +162,7 @@ export function AgentTable({
                 onConnect={onConnect}
                 onDisable={onDisable}
                 onDelete={onDelete}
+                onInstall={onInstall}
                 onManualSetup={onManualSetup}
               />
             ))}
@@ -155,6 +181,7 @@ export function AgentTable({
                 onConnect={onConnect}
                 onDisable={onDisable}
                 onDelete={onDelete}
+                onInstall={onInstall}
                 onManualSetup={onManualSetup}
               />
             ))}

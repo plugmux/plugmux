@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "agents": [
     {
       "id": "claude-code",
@@ -8,6 +8,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://docs.anthropic.com/en/docs/claude-code/overview",
+      "setup_hint": "Add the plugmux entry to your ~/.claude.json file under mcpServers.",
       "config_paths": {
         "macos": "~/.claude.json",
         "linux": "~/.claude.json",
@@ -22,6 +24,8 @@
       "mcp_key": "mcpServers",
       "tier": "auto",
       "supported_transports": ["stdio"],
+      "install_url": "https://claude.ai/download",
+      "setup_hint": "Add the plugmux entry to claude_desktop_config.json. Note: Claude Desktop only supports stdio transport.",
       "config_paths": {
         "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
         "linux": "~/.config/Claude/claude_desktop_config.json",
@@ -35,6 +39,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev",
+      "setup_hint": "Install the Cline VS Code extension, then add plugmux to the MCP settings file.",
       "config_paths": {
         "macos": "~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
         "linux": "~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
@@ -48,6 +54,8 @@
       "config_format": "toml",
       "mcp_key": "mcp_servers",
       "tier": "auto",
+      "install_url": "https://github.com/openai/codex",
+      "setup_hint": "Add the plugmux entry to ~/.codex/config.toml under [mcp_servers].",
       "config_paths": {
         "macos": "~/.codex/config.toml",
         "linux": "~/.codex/config.toml",
@@ -61,6 +69,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://www.cursor.com/downloads",
+      "setup_hint": "Add the plugmux entry to ~/.cursor/mcp.json under mcpServers.",
       "config_paths": {
         "macos": "~/.cursor/mcp.json",
         "linux": "~/.cursor/mcp.json",
@@ -74,6 +84,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://github.com/google-gemini/gemini-cli",
+      "setup_hint": "Add the plugmux entry to ~/.gemini/settings.json under mcpServers.",
       "config_paths": {
         "macos": "~/.gemini/settings.json",
         "linux": "~/.gemini/settings.json",
@@ -87,6 +99,8 @@
       "config_format": "json",
       "mcp_key": "extensions",
       "tier": "manual",
+      "install_url": "https://github.com/block/goose",
+      "setup_hint": "Open Goose settings and add plugmux as an extension. Goose uses YAML config which requires manual setup.",
       "config_paths": null
     },
     {
@@ -96,6 +110,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://kiro.dev/downloads/",
+      "setup_hint": "Add the plugmux entry to ~/.kiro/settings/mcp.json under mcpServers.",
       "config_paths": {
         "macos": "~/.kiro/settings/mcp.json",
         "linux": "~/.kiro/settings/mcp.json",
@@ -109,6 +125,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://lmstudio.ai/",
+      "setup_hint": "Add the plugmux entry to ~/.lmstudio/mcp.json or use Install > Edit mcp.json in the Program tab.",
       "config_paths": {
         "macos": "~/.lmstudio/mcp.json",
         "linux": "~/.lmstudio/mcp.json",
@@ -122,6 +140,8 @@
       "config_format": "json",
       "mcp_key": "mcp",
       "tier": "auto",
+      "install_url": "https://opencode.ai/download",
+      "setup_hint": "Add the plugmux entry to ~/.config/opencode/opencode.json under mcp.",
       "config_paths": {
         "macos": "~/.config/opencode/opencode.json",
         "linux": "~/.config/opencode/opencode.json",
@@ -135,6 +155,8 @@
       "config_format": "json",
       "mcp_key": "servers",
       "tier": "auto",
+      "install_url": "https://code.visualstudio.com/download",
+      "setup_hint": "Add the plugmux entry to the user MCP config. Use the command palette: 'MCP: Open User Configuration'.",
       "config_paths": {
         "macos": "~/Library/Application Support/Code/User/mcp.json",
         "linux": "~/.config/Code/User/mcp.json",
@@ -148,6 +170,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://windsurf.com/download",
+      "setup_hint": "Add the plugmux entry to ~/.codeium/windsurf/mcp_config.json under mcpServers.",
       "config_paths": {
         "macos": "~/.codeium/windsurf/mcp_config.json",
         "linux": "~/.codeium/windsurf/mcp_config.json",
@@ -161,6 +185,8 @@
       "config_format": "json",
       "mcp_key": "context_servers",
       "tier": "auto",
+      "install_url": "https://zed.dev/download",
+      "setup_hint": "Add the plugmux entry to ~/.config/zed/settings.json under context_servers. Zed uses a different config structure.",
       "config_paths": {
         "macos": "~/.config/zed/settings.json",
         "linux": "~/.config/zed/settings.json",
@@ -174,6 +200,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "manual",
+      "install_url": "https://openai.com/chatgpt/download/",
+      "setup_hint": "Open ChatGPT Desktop > Settings > MCP Servers and add plugmux manually through the UI.",
       "config_paths": null
     },
     {
@@ -183,6 +211,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://docs.github.com/en/copilot/github-copilot-in-the-cli",
+      "setup_hint": "Add the plugmux entry to ~/.copilot/mcp-config.json under mcpServers.",
       "config_paths": {
         "macos": "~/.copilot/mcp-config.json",
         "linux": "~/.copilot/mcp-config.json",
@@ -196,6 +226,8 @@
       "config_format": "json",
       "mcp_key": "mcpServers",
       "tier": "auto",
+      "install_url": "https://antigravity.codes/",
+      "setup_hint": "Add the plugmux entry to ~/.gemini/antigravity/mcp_config.json under mcpServers.",
       "config_paths": {
         "macos": "~/.gemini/antigravity/mcp_config.json",
         "linux": "~/.gemini/antigravity/mcp_config.json",

@@ -21,6 +21,9 @@ pub struct DetectedAgent {
     pub installed: bool,
     pub status: AgentStatus,
     pub source: String, // "auto", "registry", "custom"
+    pub tier: String,   // "auto", "manual"
+    pub install_url: Option<String>,
+    pub setup_hint: Option<String>,
 }
 
 /// Determines the plugmux connection status by inspecting an agent's config file.
@@ -122,6 +125,12 @@ pub fn detect_agent(entry: &AgentEntry, registry: &AgentRegistry) -> DetectedAge
             AgentTier::Auto => "auto".to_string(),
             AgentTier::Manual => "registry".to_string(),
         },
+        tier: match entry.tier {
+            AgentTier::Auto => "auto".to_string(),
+            AgentTier::Manual => "manual".to_string(),
+        },
+        install_url: entry.install_url.clone(),
+        setup_hint: entry.setup_hint.clone(),
     }
 }
 
@@ -188,6 +197,9 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
                 installed,
                 status,
                 source: source.to_string(),
+                tier: "custom".to_string(),
+                install_url: None,
+                setup_hint: None,
             });
         }
 
