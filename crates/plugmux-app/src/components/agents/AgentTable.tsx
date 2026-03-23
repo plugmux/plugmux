@@ -22,13 +22,15 @@ const statusTooltip: Record<DetectedAgent["status"], string> = {
   gray: "Not connected",
 };
 
-interface AgentTableProps {
-  agents: DetectedAgent[];
+interface AgentRowProps {
+  agent: DetectedAgent;
   onConnect: (id: string) => void;
   onDisable: (agent: DetectedAgent) => void;
   onDelete: (agent: DetectedAgent) => void;
   onManualSetup: (agent: DetectedAgent) => void;
 }
+
+type AgentTableProps = { agents: DetectedAgent[] } & Omit<AgentRowProps, "agent">;
 
 function AgentRow({
   agent,
@@ -36,20 +38,13 @@ function AgentRow({
   onDisable,
   onDelete,
   onManualSetup,
-}: {
-  agent: DetectedAgent;
-  onConnect: (id: string) => void;
-  onDisable: (agent: DetectedAgent) => void;
-  onDelete: (agent: DetectedAgent) => void;
-  onManualSetup: (agent: DetectedAgent) => void;
-}) {
+}: AgentRowProps) {
   const isConnected = agent.status === "green" || agent.status === "yellow";
   const isInstalled = agent.installed || agent.source === "custom";
   const isManual = !isInstalled && agent.source !== "custom";
 
   return (
     <div className="flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5">
-      {/* Status dot */}
       <Tooltip>
         <TooltipTrigger asChild>
           <span
@@ -61,12 +56,10 @@ function AgentRow({
         </TooltipContent>
       </Tooltip>
 
-      {/* Agent icon */}
       <span className={isManual ? "opacity-40" : ""}>
         <AgentIcon icon={agent.icon} name={agent.name} />
       </span>
 
-      {/* Name + config path */}
       <div className="min-w-0 flex-1">
         <p className={`text-sm font-medium ${isManual ? "opacity-40" : ""}`}>
           {agent.name}
@@ -78,7 +71,6 @@ function AgentRow({
         )}
       </div>
 
-      {/* Right side actions */}
       {isInstalled && (
         <>
           {agent.source === "custom" && (

@@ -18,7 +18,6 @@ use crate::environment;
 use crate::manager::ServerManager;
 use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ResourceInfo, ToolInfo};
-use crate::server::HealthStatus;
 
 /// The plugmux management layer — served only on `/env/global`.
 pub struct PlugmuxLayer {

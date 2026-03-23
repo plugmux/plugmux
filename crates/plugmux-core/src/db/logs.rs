@@ -38,7 +38,8 @@ impl LogEntry {
     pub fn summarize_value(value: &Value) -> Option<String> {
         let s = serde_json::to_string(value).ok()?;
         if s.len() > 2048 {
-            Some(format!("{}...", &s[..2048]))
+            let boundary = s.floor_char_boundary(2048);
+            Some(format!("{}...", &s[..boundary]))
         } else {
             Some(s)
         }

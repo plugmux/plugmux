@@ -2,7 +2,6 @@
 //! in an environment and routes calls to the correct backend.
 
 pub mod prompts;
-pub mod relay;
 pub mod resources;
 pub mod tools;
 

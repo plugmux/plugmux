@@ -110,7 +110,7 @@ async fn handle_sse(
 async fn handle_jsonrpc(
     State(state): State<AppState>,
     Path(env_id): Path<String>,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     let start = std::time::Instant::now();
