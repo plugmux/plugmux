@@ -71,6 +71,10 @@ impl McpClient for HttpSseMcpClient {
                     .to_string(),
                 input_schema: serde_json::to_value(&*t.input_schema)
                     .unwrap_or(Value::Object(Default::default())),
+                output_schema: t.output_schema.as_ref()
+                    .and_then(|s| serde_json::to_value(&**s).ok()),
+                annotations: t.annotations.as_ref()
+                    .and_then(|a| serde_json::to_value(a).ok()),
             })
             .collect())
     }
