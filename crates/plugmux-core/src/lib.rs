@@ -8,6 +8,7 @@ pub mod health;
 pub mod manager;
 pub mod migration;
 pub mod pending_actions;
+pub mod plugmux_layer;
 pub mod proxy;
 pub mod proxy_layer;
 pub mod resolver;
