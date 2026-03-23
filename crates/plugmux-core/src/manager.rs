@@ -92,13 +92,27 @@ impl ServerManager {
         Ok(())
     }
 
-    /// List all tools exposed by a specific server.
-    pub async fn list_tools(&self, server_id: &str) -> Result<Vec<ToolInfo>, ProxyError> {
+    /// Look up a server by ID and run an async operation on it.
+    async fn with_server<'a, F, Fut, T>(
+        &'a self,
+        server_id: &str,
+        f: F,
+    ) -> Result<T, ProxyError>
+    where
+        F: FnOnce(&'a ManagedServer) -> Fut,
+        Fut: std::future::Future<Output = T>,
+    {
         let map = self.servers.read().await;
         let managed = map
             .get(server_id)
             .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.list_tools().await
+        Ok(f(managed).await)
+    }
+
+    /// List all tools exposed by a specific server.
+    pub async fn list_tools(&self, server_id: &str) -> Result<Vec<ToolInfo>, ProxyError> {
+        self.with_server(server_id, |ms| ms.client.list_tools())
+            .await?
     }
 
     /// Call a tool on a specific server.
@@ -108,38 +122,26 @@ impl ServerManager {
         tool_name: &str,
         args: Value,
     ) -> Result<Value, ProxyError> {
-        let map = self.servers.read().await;
-        let managed = map
-            .get(server_id)
-            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.call_tool(tool_name, args).await
+        self.with_server(server_id, |ms| ms.client.call_tool(tool_name, args))
+            .await?
     }
 
     /// List all resources exposed by a specific server.
     pub async fn list_resources(&self, server_id: &str) -> Result<Vec<ResourceInfo>, ProxyError> {
-        let map = self.servers.read().await;
-        let managed = map
-            .get(server_id)
-            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.list_resources().await
+        self.with_server(server_id, |ms| ms.client.list_resources())
+            .await?
     }
 
     /// Read a resource from a specific server.
     pub async fn read_resource(&self, server_id: &str, uri: &str) -> Result<Value, ProxyError> {
-        let map = self.servers.read().await;
-        let managed = map
-            .get(server_id)
-            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.read_resource(uri).await
+        self.with_server(server_id, |ms| ms.client.read_resource(uri))
+            .await?
     }
 
     /// List all prompts exposed by a specific server.
     pub async fn list_prompts(&self, server_id: &str) -> Result<Vec<PromptInfo>, ProxyError> {
-        let map = self.servers.read().await;
-        let managed = map
-            .get(server_id)
-            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.list_prompts().await
+        self.with_server(server_id, |ms| ms.client.list_prompts())
+            .await?
     }
 
     /// Get a prompt from a specific server.
@@ -149,11 +151,8 @@ impl ServerManager {
         name: &str,
         args: Value,
     ) -> Result<Value, ProxyError> {
-        let map = self.servers.read().await;
-        let managed = map
-            .get(server_id)
-            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))?;
-        managed.client.get_prompt(name, args).await
+        self.with_server(server_id, |ms| ms.client.get_prompt(name, args))
+            .await?
     }
 
     /// Send roots to specific servers (scoped to an environment's server list).

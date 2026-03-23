@@ -167,12 +167,7 @@ impl PlugmuxLayer {
             Err(_) => 0,
         };
 
-        let health_str = match &health {
-            Some(HealthStatus::Healthy) => "healthy",
-            Some(HealthStatus::Degraded { .. }) => "degraded",
-            Some(HealthStatus::Unavailable { .. }) => "unavailable",
-            None => "not_found",
-        };
+        let health_str = health.as_ref().map_or("not_found", |h| h.as_str());
 
         let status = json!({
             "server_id": server_id,
@@ -279,11 +274,7 @@ impl PlugmuxLayer {
                 Ok(tools) => tools.len(),
                 Err(_) => 0,
             };
-            let health_str = match health {
-                HealthStatus::Healthy => "healthy",
-                HealthStatus::Degraded { .. } => "degraded",
-                HealthStatus::Unavailable { .. } => "unavailable",
-            };
+            let health_str = health.as_str();
             entries.push(json!({
                 "id": id,
                 "health": health_str,

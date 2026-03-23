@@ -153,50 +153,40 @@ async fn handle_jsonrpc(
         resp_headers.insert("mcp-session-id", val);
     }
 
-    match result {
-        Ok(value) => (
-            StatusCode::OK,
-            resp_headers.clone(),
-            Json(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": value,
-            })),
-        ),
-        Err(ProxyError::ApprovalRequired { action_id, message }) => (
-            StatusCode::OK,
-            resp_headers.clone(),
-            Json(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": {
-                    "content": [{
-                        "type": "text",
-                        "text": serde_json::to_string(&json!({
-                            "status": "approval_required",
-                            "action_id": action_id,
-                            "message": message,
-                        })).unwrap(),
-                    }]
-                }
-            })),
-        ),
+    let body = match result {
+        Ok(value) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": value,
+        }),
+        Err(ProxyError::ApprovalRequired { action_id, message }) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": serde_json::to_string(&json!({
+                        "status": "approval_required",
+                        "action_id": action_id,
+                        "message": message,
+                    })).unwrap(),
+                }]
+            }
+        }),
         Err(err) => {
             error!(method = %method, env = %env_id, error = %err, "JSON-RPC error");
-            (
-                StatusCode::OK,
-                resp_headers,
-                Json(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32603,
-                        "message": err.to_string(),
-                    },
-                })),
-            )
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32603,
+                    "message": err.to_string(),
+                },
+            })
         }
-    }
+    };
+
+    (StatusCode::OK, resp_headers, Json(body))
 }
 
 // ---------------------------------------------------------------------------

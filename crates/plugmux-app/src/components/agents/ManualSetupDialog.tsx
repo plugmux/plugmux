@@ -67,7 +67,7 @@ export function ManualSetupDialog({
           log.agent_info?.agent_id &&
           log.agent_info.agent_id
             .toLowerCase()
-            .includes(agent.id.toLowerCase()),
+            .includes(agent!.id.toLowerCase()),
       );
       setValidated(found);
     } catch {

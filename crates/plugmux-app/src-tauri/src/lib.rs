@@ -69,6 +69,7 @@ pub fn run() {
         ))
         .setup(move |app| {
             // Create main window programmatically so we can set traffic light position
+            #[allow(unused_mut)]
             let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("plugmux")
                 .inner_size(900.0, 600.0)
