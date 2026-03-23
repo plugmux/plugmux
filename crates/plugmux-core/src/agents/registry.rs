@@ -108,15 +108,15 @@ impl AgentRegistry {
         let mut path = raw.to_string();
 
         // Expand ~ to home directory
-        if path.starts_with("~/") || path == "~" {
-            if let Some(home) = dirs::home_dir() {
-                let home_str = home.to_string_lossy();
-                path = if path == "~" {
-                    home_str.to_string()
-                } else {
-                    format!("{}{}", home_str, &path[1..])
-                };
-            }
+        if (path.starts_with("~/") || path == "~")
+            && let Some(home) = dirs::home_dir()
+        {
+            let home_str = home.to_string_lossy();
+            path = if path == "~" {
+                home_str.to_string()
+            } else {
+                format!("{}{}", home_str, &path[1..])
+            };
         }
 
         // Expand Windows environment variables

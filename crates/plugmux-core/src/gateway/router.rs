@@ -133,17 +133,17 @@ async fn handle_jsonrpc(
             Ok(v) => Ok(v.clone()),
             Err(e) => Err(e.to_string()),
         };
-        logging::log_request(
+        logging::log_request(&logging::LogRequestParams {
             db,
-            &env_id,
+            env_id: &env_id,
             method,
-            &params,
-            &log_result,
+            params: &params,
+            result: &log_result,
             duration,
-            user_agent.as_deref(),
-            agent_id.as_deref(),
-            "default-session",
-        );
+            user_agent: user_agent.as_deref(),
+            agent_id: agent_id.as_deref(),
+            session_id: "default-session",
+        });
     }
 
     // Streamable HTTP requires Mcp-Session-Id header

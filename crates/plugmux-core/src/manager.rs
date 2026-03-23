@@ -160,10 +160,10 @@ impl ServerManager {
     pub async fn broadcast_roots(&self, server_ids: &[String], roots: Value) {
         let map = self.servers.read().await;
         for id in server_ids {
-            if let Some(managed) = map.get(id) {
-                if let Err(e) = managed.client.send_roots(roots.clone()).await {
-                    tracing::warn!(server_id = %id, error = %e, "failed to send roots");
-                }
+            if let Some(managed) = map.get(id)
+                && let Err(e) = managed.client.send_roots(roots.clone()).await
+            {
+                tracing::warn!(server_id = %id, error = %e, "failed to send roots");
             }
         }
     }

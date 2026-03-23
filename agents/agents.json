@@ -55,15 +55,6 @@
       }
     },
     {
-      "id": "continue",
-      "name": "Continue",
-      "icon": "continue",
-      "config_format": "json",
-      "mcp_key": "mcpServers",
-      "tier": "manual",
-      "config_paths": null
-    },
-    {
       "id": "cursor",
       "name": "Cursor",
       "icon": "cursor",
@@ -138,15 +129,6 @@
       }
     },
     {
-      "id": "sema4ai",
-      "name": "Sema4.ai Studio",
-      "icon": "sema4ai",
-      "config_format": "json",
-      "mcp_key": "mcpServers",
-      "tier": "manual",
-      "config_paths": null
-    },
-    {
       "id": "vscode",
       "name": "VS Code",
       "icon": "vscode",
@@ -180,7 +162,7 @@
       "mcp_key": "context_servers",
       "tier": "auto",
       "config_paths": {
-        "macos": "~/Library/Application Support/Zed/settings.json",
+        "macos": "~/.config/zed/settings.json",
         "linux": "~/.config/zed/settings.json",
         "windows": null
       }

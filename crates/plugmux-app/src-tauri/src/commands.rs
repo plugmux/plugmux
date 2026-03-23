@@ -507,10 +507,10 @@ fn resolve_agent_config(
         let path = std::path::PathBuf::from(
             path_str.replace(
                 "~",
-                &dirs::home_dir()
+                dirs::home_dir()
                     .unwrap_or_default()
                     .to_string_lossy()
-                    .to_string(),
+                    .as_ref(),
             ),
         );
         let format = state_entry

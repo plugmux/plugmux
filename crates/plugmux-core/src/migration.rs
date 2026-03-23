@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
 
 use crate::catalog::CatalogRegistry;
 use crate::config::{self, Config, ConfigError, Environment};
@@ -95,16 +94,15 @@ fn match_catalog(server: &serde_json::Value, catalog: &CatalogRegistry) -> Optio
     for entry in catalog.list_servers() {
         // Match by command (stdio servers)
         if let (Some(cmd), Some(entry_cmd)) = (server["command"].as_str(), entry.command.as_deref())
+            && cmd == entry_cmd
         {
-            if cmd == entry_cmd {
-                return Some(entry.id.clone());
-            }
+            return Some(entry.id.clone());
         }
         // Match by url (HTTP servers)
-        if let (Some(url), Some(entry_url)) = (server["url"].as_str(), entry.url.as_deref()) {
-            if url == entry_url {
-                return Some(entry.id.clone());
-            }
+        if let (Some(url), Some(entry_url)) = (server["url"].as_str(), entry.url.as_deref())
+            && url == entry_url
+        {
+            return Some(entry.id.clone());
         }
     }
     None
@@ -139,10 +137,10 @@ fn process_servers(
             // Deserialise into ServerConfig; unknown fields (e.g. `enabled`)
             // are silently ignored because ServerConfig has no
             // `#[serde(deny_unknown_fields)]`.
-            if let Ok(config) = serde_json::from_value::<ServerConfig>(server.clone()) {
-                if !custom_servers.iter().any(|s| s.id == config.id) {
-                    custom_servers.push(config);
-                }
+            if let Ok(config) = serde_json::from_value::<ServerConfig>(server.clone())
+                && !custom_servers.iter().any(|s| s.id == config.id)
+            {
+                custom_servers.push(config);
             }
 
             if !ids.contains(&id) {
@@ -162,6 +160,7 @@ fn process_servers(
 mod tests {
     use super::*;
     use crate::catalog::CatalogRegistry;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     // -----------------------------------------------------------------------

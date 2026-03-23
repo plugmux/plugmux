@@ -50,13 +50,13 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
         for rs in &resolved {
             if let Some(server_config) = &rs.config {
                 // Only start if not already running (avoid duplicate starts across envs)
-                if !manager.is_healthy(&rs.id).await {
-                    if let Err(e) = manager.start_server(server_config.clone()).await {
-                        eprintln!(
-                            "  [warn] failed to start server '{}' for env '{}': {}",
-                            rs.id, env.id, e
-                        );
-                    }
+                if !manager.is_healthy(&rs.id).await
+                    && let Err(e) = manager.start_server(server_config.clone()).await
+                {
+                    eprintln!(
+                        "  [warn] failed to start server '{}' for env '{}': {}",
+                        rs.id, env.id, e
+                    );
                 }
             } else {
                 eprintln!(

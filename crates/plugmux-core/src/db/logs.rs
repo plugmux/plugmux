@@ -45,35 +45,40 @@ impl LogEntry {
     }
 }
 
-pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), redb::Error> {
-    let json = serde_json::to_string(entry).map_err(|e| {
-        redb::Error::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            e.to_string(),
-        ))
-    })?;
-    let write_txn = db.inner.begin_write()?;
-    {
-        let mut table = write_txn.open_table(LOGS_TABLE)?;
-        table.insert(entry.id.as_str(), json.as_str())?;
+pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), Box<redb::Error>> {
+    #[allow(clippy::result_large_err)]
+    fn inner(db: &Arc<Db>, entry: &LogEntry) -> Result<(), redb::Error> {
+        let json = serde_json::to_string(entry).map_err(|e| {
+            redb::Error::Io(std::io::Error::other(e.to_string()))
+        })?;
+        let write_txn = db.inner.begin_write()?;
+        {
+            let mut table = write_txn.open_table(LOGS_TABLE)?;
+            table.insert(entry.id.as_str(), json.as_str())?;
+        }
+        write_txn.commit()?;
+        Ok(())
     }
-    write_txn.commit()?;
-    Ok(())
+    inner(db, entry).map_err(Box::new)
 }
 
-pub fn read_recent_logs(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, redb::Error> {
-    let read_txn = db.inner.begin_read()?;
-    let table = read_txn.open_table(LOGS_TABLE)?;
-    let mut entries: Vec<LogEntry> = Vec::new();
-    for item in table.iter()? {
-        let (_, value) = item?;
-        if let Ok(entry) = serde_json::from_str::<LogEntry>(value.value()) {
-            entries.push(entry);
+pub fn read_recent_logs(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, Box<redb::Error>> {
+    #[allow(clippy::result_large_err)]
+    fn inner(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, redb::Error> {
+        let read_txn = db.inner.begin_read()?;
+        let table = read_txn.open_table(LOGS_TABLE)?;
+        let mut entries: Vec<LogEntry> = Vec::new();
+        for item in table.iter()? {
+            let (_, value) = item?;
+            if let Ok(entry) = serde_json::from_str::<LogEntry>(value.value()) {
+                entries.push(entry);
+            }
         }
+        entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        entries.truncate(limit);
+        Ok(entries)
     }
-    entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-    entries.truncate(limit);
-    Ok(entries)
+    inner(db, limit).map_err(Box::new)
 }
 
 #[cfg(test)]
