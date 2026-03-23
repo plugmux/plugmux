@@ -4,9 +4,9 @@
 //! handler infrastructure.  Exposes one tool: "echo" that takes a `message`
 //! parameter and returns it verbatim.
 
-use rmcp::{ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::{ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +47,9 @@ impl ServerHandler for EchoServer {}
 async fn main() {
     let server = EchoServer::new();
     let transport = rmcp::transport::io::stdio();
-    let service = server.serve(transport).await.expect("failed to start MCP server");
+    let service = server
+        .serve(transport)
+        .await
+        .expect("failed to start MCP server");
     service.waiting().await.expect("server error");
 }

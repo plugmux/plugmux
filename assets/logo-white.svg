@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 40" fill="none">
+  <!-- prism symbol -->
+  <g transform="translate(2, 6) scale(0.07)" fill="white">
+    <path d="M440.908 324.001L464.423 364.73H43.2686L124.246 224.473L440.908 324.001Z"/>
+    <path d="M512 258.153V296.442H459.639L437.532 258.153H512Z"/>
+    <path d="M418.727 285.582L157.669 203.532L324.382 122.171L418.727 285.582Z"/>
+    <path d="M512 228.153H420.212L398.106 189.865H512V228.153Z"/>
+    <path d="M91.7607 220.74H0V190.74H109.081L91.7607 220.74Z"/>
+    <path d="M309.346 96.127L154.802 171.549L253.846 0L309.346 96.127Z"/>
+    <path d="M512 159.865H380.786L358.68 121.577H512V159.865Z"/>
+  </g>
+  <!-- "plugmux" bold -->
+  <text x="49" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="white" letter-spacing="0.5">plugmux</text>
+  <!-- "desktop" thin -->
+  <text x="148" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="200" fill="white" letter-spacing="0.5">desktop</text>
+  <!-- beta badge -->
+  <rect x="243" y="11" width="38" height="18" rx="4" fill="#9b2c2c"/>
+  <text x="262" y="24" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#fecaca" text-anchor="middle">beta</text>
+</svg>

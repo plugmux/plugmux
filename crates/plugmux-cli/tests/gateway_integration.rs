@@ -2,15 +2,17 @@
 //!
 //! Validates the full flow: start mock MCP server -> build gateway -> send
 //! JSON-RPC requests -> verify responses -> cleanup.
+//!
+//! Architecture under test:
+//! - `/env/global`    → PlugmuxLayer: exposes plugmux__ management tools
+//! - `/env/test-env`  → ProxyLayer:   directly exposes upstream server tools
 
 use std::sync::Arc;
 
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 
-use plugmux_core::config::{
-    EnvironmentConfig, MainConfig, PlugmuxConfig,
-};
+use plugmux_core::config::{Config, Environment, PermissionLevel, Permissions};
 use plugmux_core::gateway::router::build_router;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::server::{Connectivity, ServerConfig, Transport};
@@ -27,54 +29,61 @@ async fn jsonrpc_request(client: &reqwest::Client, url: &str, body: Value) -> Va
         .await
         .expect("HTTP request failed");
     assert_eq!(resp.status(), 200);
-    resp.json::<Value>().await.expect("failed to parse JSON response")
+    resp.json::<Value>()
+        .await
+        .expect("failed to parse JSON response")
 }
 
 #[tokio::test]
 async fn test_full_gateway_flow() {
     // -----------------------------------------------------------------------
-    // 1. Build config with a mock server in Main and one environment
+    // 1. Build config with a "test-env" environment containing mock-echo
     // -----------------------------------------------------------------------
-    let config = PlugmuxConfig {
-        main: MainConfig {
-            servers: vec![ServerConfig {
-                id: "mock-echo".to_string(),
-                name: "Mock Echo".to_string(),
-                transport: Transport::Stdio,
-                command: Some(MOCK_SERVER_BIN.to_string()),
-                args: Some(vec![]),
-                url: None,
-                connectivity: Connectivity::Local,
-                enabled: true,
-                description: Some("Mock echo server for testing".to_string()),
-            }],
+    let config = Config {
+        port: 4242,
+        permissions: Permissions {
+            enable_server: PermissionLevel::Allow,
+            disable_server: PermissionLevel::Allow,
         },
-        environments: vec![EnvironmentConfig {
-            id: "main".to_string(),
-            name: "Main".to_string(),
-            endpoint: "http://localhost:0/env/main".to_string(),
-            servers: vec![],
-            overrides: vec![],
+        environments: vec![Environment {
+            id: "test-env".to_string(),
+            name: "Test Environment".to_string(),
+            servers: vec!["mock-echo".to_string()],
         }],
     };
 
     // -----------------------------------------------------------------------
-    // 2. Create ServerManager and start the mock server
+    // 2. Create ServerManager and start the mock server manually
+    //    (mock-echo is not in the catalog, so we start it via ServerManager)
     // -----------------------------------------------------------------------
+    let mock_server_config = ServerConfig {
+        id: "mock-echo".to_string(),
+        name: "Mock Echo".to_string(),
+        transport: Transport::Stdio,
+        command: Some(MOCK_SERVER_BIN.to_string()),
+        args: Some(vec![]),
+        url: None,
+        connectivity: Connectivity::Local,
+        description: Some("Mock echo server for testing".to_string()),
+    };
+
     let manager = Arc::new(ServerManager::new());
     manager
-        .start_server(config.main.servers[0].clone())
+        .start_server(mock_server_config)
         .await
         .expect("failed to start mock server");
 
     // Verify it's healthy
-    assert!(manager.is_healthy("mock-echo").await, "mock server should be healthy");
+    assert!(
+        manager.is_healthy("mock-echo").await,
+        "mock server should be healthy"
+    );
 
     // -----------------------------------------------------------------------
     // 3. Build the axum router and spawn the HTTP server on a random port
     // -----------------------------------------------------------------------
     let config = Arc::new(RwLock::new(config));
-    let router = build_router(config.clone(), manager.clone());
+    let router = build_router(config.clone(), manager.clone(), None);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -87,10 +96,11 @@ async fn test_full_gateway_flow() {
     });
 
     let client = reqwest::Client::new();
-    let env_url = format!("{base_url}/env/main");
+    let env_url = format!("{base_url}/env/test-env");
+    let global_url = format!("{base_url}/env/global");
 
     // -----------------------------------------------------------------------
-    // 4. Test: initialize
+    // 4. Test: initialize (works on any env)
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
@@ -108,14 +118,14 @@ async fn test_full_gateway_flow() {
     assert_eq!(resp["id"], 1);
     let server_info = &resp["result"]["serverInfo"];
     assert_eq!(server_info["name"], "plugmux");
-    assert_eq!(server_info["version"], "0.1.0");
+    assert_eq!(server_info["version"], "0.2.0");
 
     // -----------------------------------------------------------------------
-    // 5. Test: tools/list — should return 5 gateway tools
+    // 5. Test: tools/list on /env/global — should return plugmux__ management tools
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
-        &env_url,
+        &global_url,
         json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -128,20 +138,23 @@ async fn test_full_gateway_flow() {
     let tools = resp["result"]["tools"]
         .as_array()
         .expect("tools should be an array");
-    assert_eq!(tools.len(), 5, "gateway should expose 5 tools");
+    assert_eq!(
+        tools.len(),
+        6,
+        "global env should expose 6 plugmux management tools"
+    );
 
-    let tool_names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
-    assert!(tool_names.contains(&"list_servers"));
-    assert!(tool_names.contains(&"get_tools"));
-    assert!(tool_names.contains(&"execute"));
-    assert!(tool_names.contains(&"enable_server"));
-    assert!(tool_names.contains(&"disable_server"));
+    let tool_names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
+    assert!(tool_names.contains(&"plugmux__list_servers"));
+    assert!(tool_names.contains(&"plugmux__enable_server"));
+    assert!(tool_names.contains(&"plugmux__disable_server"));
+    assert!(tool_names.contains(&"plugmux__list_environments"));
+    assert!(tool_names.contains(&"plugmux__server_status"));
+    assert!(tool_names.contains(&"plugmux__confirm_action"));
 
     // -----------------------------------------------------------------------
-    // 6. Test: tools/call list_servers — mock server should be listed
+    // 6. Test: tools/list on /env/test-env — should return upstream echo tool namespaced
+    //    Proxy layer namespaces tools as server_id__tool_name (e.g. mock-echo__echo)
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
@@ -149,32 +162,27 @@ async fn test_full_gateway_flow() {
         json!({
             "jsonrpc": "2.0",
             "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": "list_servers",
-                "arguments": {}
-            }
+            "method": "tools/list",
+            "params": {}
         }),
     )
     .await;
 
-    assert!(resp["error"].is_null(), "list_servers should not error: {resp}");
-    let content_text = resp["result"]["content"][0]["text"]
-        .as_str()
-        .expect("should have text content");
-    let servers: Vec<Value> =
-        serde_json::from_str(content_text).expect("should be valid JSON array");
-    assert_eq!(servers.len(), 1, "should have exactly one server");
-    assert_eq!(servers[0]["id"], "mock-echo");
-    assert_eq!(servers[0]["name"], "Mock Echo");
-    assert_eq!(servers[0]["healthy"], true);
+    let tools = resp["result"]["tools"]
+        .as_array()
+        .expect("tools should be an array");
     assert!(
-        servers[0]["tool_count"].as_u64().unwrap() >= 1,
-        "mock server should expose at least 1 tool"
+        !tools.is_empty(),
+        "test-env should expose at least one upstream tool"
+    );
+    let tool_names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
+    assert!(
+        tool_names.contains(&"mock-echo__echo"),
+        "test-env should expose 'mock-echo__echo' tool from mock-echo server; got: {tool_names:?}"
     );
 
     // -----------------------------------------------------------------------
-    // 7. Test: tools/call get_tools — echo tool should be listed
+    // 7. Test: tools/call on /env/test-env — call echo via proxy layer (namespaced)
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
@@ -184,62 +192,62 @@ async fn test_full_gateway_flow() {
             "id": 4,
             "method": "tools/call",
             "params": {
-                "name": "get_tools",
+                "name": "mock-echo__echo",
                 "arguments": {
-                    "server_id": "mock-echo"
+                    "message": "hello from plugmux"
                 }
             }
         }),
     )
     .await;
 
-    assert!(resp["error"].is_null(), "get_tools should not error: {resp}");
-    let content_text = resp["result"]["content"][0]["text"]
+    assert!(
+        resp["error"].is_null(),
+        "echo tool call should not error: {resp}"
+    );
+    // Proxy layer returns the raw rmcp content array as the result
+    let result = &resp["result"];
+    let content = result
+        .as_array()
+        .unwrap_or_else(|| panic!("echo result should be a content array: {resp}"));
+    assert!(
+        !content.is_empty(),
+        "echo result content should not be empty: {resp}"
+    );
+    let echo_text = content[0]["text"]
         .as_str()
-        .expect("should have text content");
-    let tools: Vec<Value> =
-        serde_json::from_str(content_text).expect("should be valid JSON array");
-    let echo_tool = tools
-        .iter()
-        .find(|t| t["name"] == "echo")
-        .expect("echo tool should be listed");
-    assert_eq!(echo_tool["description"], "Echo a message back");
+        .unwrap_or_else(|| panic!("unexpected echo result format: {resp}"));
+    assert_eq!(echo_text, "hello from plugmux");
 
     // -----------------------------------------------------------------------
-    // 8. Test: tools/call execute — call echo tool, verify response
+    // 8. Test: tools/call plugmux__list_servers on /env/global
     // -----------------------------------------------------------------------
     let resp = jsonrpc_request(
         &client,
-        &env_url,
+        &global_url,
         json!({
             "jsonrpc": "2.0",
             "id": 5,
             "method": "tools/call",
             "params": {
-                "name": "execute",
-                "arguments": {
-                    "server_id": "mock-echo",
-                    "tool_name": "echo",
-                    "args": {
-                        "message": "hello from plugmux"
-                    }
-                }
+                "name": "plugmux__list_servers",
+                "arguments": {}
             }
         }),
     )
     .await;
 
-    assert!(resp["error"].is_null(), "execute should not error: {resp}");
-    // The execute response is the raw upstream result — an array of content items.
-    let result = &resp["result"];
-    // rmcp returns content as an array of {type, text} objects
-    let echo_text = result
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|item| item.get("text").or_else(|| item.get("raw").and_then(|r| r.get("text"))))
-        .and_then(|v| v.as_str())
-        .unwrap_or_else(|| panic!("unexpected execute result format: {result}"));
-    assert_eq!(echo_text, "hello from plugmux");
+    assert!(
+        resp["error"].is_null(),
+        "plugmux__list_servers should not error: {resp}"
+    );
+    let content_text = resp["result"]["content"][0]["text"]
+        .as_str()
+        .expect("should have text content");
+    let servers: Vec<Value> =
+        serde_json::from_str(content_text).expect("should be valid JSON array");
+    assert_eq!(servers.len(), 1, "should have exactly one server");
+    assert_eq!(servers[0]["id"], "mock-echo");
 
     // -----------------------------------------------------------------------
     // 9. Test: health endpoint

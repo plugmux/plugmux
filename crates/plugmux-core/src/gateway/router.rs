@@ -1,23 +1,35 @@
 //! HTTP router for the plugmux gateway.
 //!
-//! Exposes a per-environment MCP JSON-RPC endpoint and a health check.
+//! Dispatches JSON-RPC requests to either the **plugmux layer** (for
+//! `/env/global`) or the **proxy layer** (for project environments).
 
 use std::sync::Arc;
 
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{HeaderMap, StatusCode},
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
+use futures::stream::Stream;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
-use crate::config::PlugmuxConfig;
-use crate::gateway::tools::GatewayTools;
+use crate::config::Config;
+use crate::db::Db;
 use crate::manager::ServerManager;
+use crate::plugmux_layer::PlugmuxLayer;
+use crate::proxy::{PromptInfo, ProxyError, ResourceInfo, ToolInfo};
+use crate::proxy_layer::ProxyLayer;
+
+use super::{agent_detect, logging};
+
+use crate::config::GLOBAL_ENV;
 
 // ---------------------------------------------------------------------------
 // Shared application state
@@ -25,7 +37,9 @@ use crate::manager::ServerManager;
 
 #[derive(Clone)]
 struct AppState {
-    tools: Arc<GatewayTools>,
+    plugmux: Arc<PlugmuxLayer>,
+    proxy: Arc<ProxyLayer>,
+    db: Option<Arc<Db>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -34,25 +48,28 @@ struct AppState {
 
 /// Build the axum [`Router`] with all gateway routes.
 pub fn build_router(
-    config: Arc<RwLock<PlugmuxConfig>>,
+    config: Arc<RwLock<Config>>,
     manager: Arc<ServerManager>,
+    db: Option<Arc<Db>>,
 ) -> Router {
-    let tools = Arc::new(GatewayTools::new(config, manager));
-    let state = AppState { tools };
+    let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone()));
+    let proxy = Arc::new(ProxyLayer::new(config, manager));
+    let state = AppState { plugmux, proxy, db };
 
     Router::new()
-        .route("/env/{env_id}", post(handle_jsonrpc))
+        .route("/env/{env_id}", post(handle_jsonrpc).get(handle_sse))
         .route("/health", get(handle_health))
         .with_state(state)
 }
 
 /// Start the axum HTTP server on the given port.
 pub async fn start_server(
-    config: Arc<RwLock<PlugmuxConfig>>,
+    config: Arc<RwLock<Config>>,
     manager: Arc<ServerManager>,
     port: u16,
+    db: Option<Arc<Db>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let router = build_router(config, manager);
+    let router = build_router(config, manager, db);
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("plugmux gateway listening on http://{addr}");
@@ -69,61 +86,137 @@ async fn handle_health() -> impl IntoResponse {
 }
 
 // ---------------------------------------------------------------------------
+// SSE endpoint (GET) — Streamable HTTP transport
+// ---------------------------------------------------------------------------
+
+/// MCP Streamable HTTP requires a GET endpoint that returns an SSE stream.
+/// This keeps the connection open for server-initiated messages (notifications,
+/// sampling, elicitation). For now it sends a keep-alive ping.
+async fn handle_sse(
+    Path(_env_id): Path<String>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let stream = futures::stream::unfold((), |()| async {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        Some((Ok(Event::default().comment("keep-alive")), ()))
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// ---------------------------------------------------------------------------
 // JSON-RPC handler
 // ---------------------------------------------------------------------------
 
 async fn handle_jsonrpc(
     State(state): State<AppState>,
     Path(env_id): Path<String>,
+    headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let start = std::time::Instant::now();
     let id = body.get("id").cloned().unwrap_or(Value::Null);
-    let method = body
-        .get("method")
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
+    let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = body.get("params").cloned().unwrap_or(Value::Null);
 
-    let result = dispatch(&state.tools, &env_id, method, &params).await;
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+    let agent_id = user_agent.as_deref().and_then(agent_detect::detect_agent);
 
-    match result {
-        Ok(value) => (
-            StatusCode::OK,
-            Json(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": value,
-            })),
-        ),
+    let result = dispatch(&state, &env_id, method, &params).await;
+    let duration = start.elapsed();
+
+    // Log to DB
+    if let Some(ref db) = state.db {
+        let log_result = match &result {
+            Ok(v) => Ok(v.clone()),
+            Err(e) => Err(e.to_string()),
+        };
+        logging::log_request(&logging::LogRequestParams {
+            db,
+            env_id: &env_id,
+            method,
+            params: &params,
+            result: &log_result,
+            duration,
+            user_agent: user_agent.as_deref(),
+            agent_id: agent_id.as_deref(),
+            session_id: "default-session",
+        });
+    }
+
+    // Streamable HTTP requires Mcp-Session-Id header
+    let session_id = format!("plugmux-{env_id}");
+    let mut resp_headers = HeaderMap::new();
+    if let Ok(val) = session_id.parse() {
+        resp_headers.insert("mcp-session-id", val);
+    }
+
+    let body = match result {
+        Ok(value) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": value,
+        }),
+        Err(ProxyError::ApprovalRequired { action_id, message }) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": serde_json::to_string(&json!({
+                        "status": "approval_required",
+                        "action_id": action_id,
+                        "message": message,
+                    })).unwrap(),
+                }]
+            }
+        }),
         Err(err) => {
             error!(method = %method, env = %env_id, error = %err, "JSON-RPC error");
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32603,
-                        "message": err,
-                    },
-                })),
-            )
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32603,
+                    "message": err.to_string(),
+                },
+            })
         }
-    }
+    };
+
+    (StatusCode::OK, resp_headers, Json(body))
 }
 
-/// Dispatch a JSON-RPC method to the appropriate handler.
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
+
+/// Dispatch a JSON-RPC method to the appropriate layer.
 async fn dispatch(
-    tools: &GatewayTools,
+    state: &AppState,
     env_id: &str,
     method: &str,
     params: &Value,
-) -> Result<Value, String> {
+) -> Result<Value, ProxyError> {
     match method {
         "initialize" => Ok(handle_initialize()),
-        "tools/list" => Ok(handle_tools_list()),
-        "tools/call" => handle_tools_call(tools, env_id, params).await,
-        _ => Err(format!("unknown method: {method}")),
+        "notifications/initialized" => Ok(Value::Null),
+        "ping" => Ok(json!({})),
+        "tools/list" => dispatch_tools_list(state, env_id).await,
+        "tools/call" => dispatch_tools_call(state, env_id, params).await,
+        "resources/list" => dispatch_resources_list(state, env_id).await,
+        "resources/read" => dispatch_resources_read(state, env_id, params).await,
+        "prompts/list" => dispatch_prompts_list(state, env_id).await,
+        "prompts/get" => dispatch_prompts_get(state, env_id, params).await,
+        "notifications/roots/updated" => {
+            if env_id != GLOBAL_ENV {
+                state.proxy.broadcast_roots(env_id, params.clone()).await?;
+            }
+            Ok(Value::Null)
+        }
+        _ => Err(ProxyError::Transport(format!("unknown method: {method}"))),
     }
 }
 
@@ -133,232 +226,173 @@ async fn dispatch(
 
 fn handle_initialize() -> Value {
     json!({
-        "protocolVersion": "2024-11-05",
+        "protocolVersion": "2025-03-26",
         "capabilities": {
-            "tools": {}
+            "tools": { "listChanged": true },
+            "resources": { "subscribe": false, "listChanged": true },
+            "prompts": { "listChanged": true }
         },
         "serverInfo": {
             "name": "plugmux",
-            "version": "0.1.0"
+            "version": "0.2.0"
         }
     })
 }
 
 // ---------------------------------------------------------------------------
-// tools/list — return schemas for our 5 gateway tools
+// Dispatch helpers
 // ---------------------------------------------------------------------------
 
-fn handle_tools_list() -> Value {
-    json!({
-        "tools": [
-            {
-                "name": "list_servers",
-                "description": "List all healthy MCP servers available in this environment",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            },
-            {
-                "name": "get_tools",
-                "description": "Get the full tool list for a specific MCP server",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "server_id": {
-                            "type": "string",
-                            "description": "The server identifier"
-                        }
-                    },
-                    "required": ["server_id"]
-                }
-            },
-            {
-                "name": "execute",
-                "description": "Execute a tool on a specific MCP server",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "server_id": {
-                            "type": "string",
-                            "description": "The server identifier"
-                        },
-                        "tool_name": {
-                            "type": "string",
-                            "description": "The tool to execute"
-                        },
-                        "args": {
-                            "type": "object",
-                            "description": "Arguments to pass to the tool"
-                        }
-                    },
-                    "required": ["server_id", "tool_name"]
-                }
-            },
-            {
-                "name": "enable_server",
-                "description": "Enable a server in this environment",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "server_id": {
-                            "type": "string",
-                            "description": "The server identifier"
-                        }
-                    },
-                    "required": ["server_id"]
-                }
-            },
-            {
-                "name": "disable_server",
-                "description": "Disable a server in this environment",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "server_id": {
-                            "type": "string",
-                            "description": "The server identifier"
-                        }
-                    },
-                    "required": ["server_id"]
-                }
+async fn dispatch_tools_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
+    let tools: Vec<ToolInfo> = if env_id == GLOBAL_ENV {
+        state.plugmux.list_tools()
+    } else {
+        state.proxy.list_tools(env_id).await?
+    };
+
+    let tools_json: Vec<Value> = tools
+        .into_iter()
+        .map(|t| {
+            let mut obj = json!({
+                "name": t.name,
+                "description": t.description,
+                "inputSchema": t.input_schema,
+            });
+            if let Some(output_schema) = t.output_schema {
+                obj["outputSchema"] = output_schema;
             }
-        ]
-    })
+            if let Some(annotations) = t.annotations {
+                obj["annotations"] = annotations;
+            }
+            obj
+        })
+        .collect();
+
+    Ok(json!({ "tools": tools_json }))
 }
 
-// ---------------------------------------------------------------------------
-// tools/call — route to the appropriate GatewayTools method
-// ---------------------------------------------------------------------------
-
-async fn handle_tools_call(
-    tools: &GatewayTools,
+async fn dispatch_tools_call(
+    state: &AppState,
     env_id: &str,
     params: &Value,
-) -> Result<Value, String> {
-    let tool_name = params
+) -> Result<Value, ProxyError> {
+    let name = params
         .get("name")
         .and_then(|n| n.as_str())
-        .ok_or_else(|| "missing 'name' in tools/call params".to_string())?;
+        .ok_or_else(|| ProxyError::Transport("missing 'name' in tools/call params".to_string()))?;
 
     let args = params
         .get("arguments")
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
 
-    match tool_name {
-        "list_servers" => {
-            let servers = tools
-                .list_servers(env_id)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            let result: Vec<Value> = servers
-                .into_iter()
-                .map(|s| {
-                    json!({
-                        "id": s.id,
-                        "name": s.name,
-                        "healthy": s.healthy,
-                        "tool_count": s.tool_count,
-                    })
-                })
-                .collect();
-
-            Ok(wrap_content(&serde_json::to_string(&result).unwrap()))
-        }
-
-        "get_tools" => {
-            let server_id = args
-                .get("server_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
-
-            let tool_list = tools
-                .get_tools(server_id)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            let result: Vec<Value> = tool_list
-                .into_iter()
-                .map(|t| {
-                    json!({
-                        "name": t.name,
-                        "description": t.description,
-                        "inputSchema": t.input_schema,
-                    })
-                })
-                .collect();
-
-            Ok(wrap_content(&serde_json::to_string(&result).unwrap()))
-        }
-
-        "execute" => {
-            let server_id = args
-                .get("server_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
-
-            let exec_tool_name = args
-                .get("tool_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'tool_name' argument".to_string())?;
-
-            let exec_args = args
-                .get("args")
-                .cloned()
-                .unwrap_or(Value::Object(Default::default()));
-
-            let result = tools
-                .execute(server_id, exec_tool_name, exec_args)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            // Pass through the upstream result directly.
-            Ok(result)
-        }
-
-        "enable_server" => {
-            let server_id = args
-                .get("server_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
-
-            tools
-                .enable_server(env_id, server_id)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            Ok(wrap_content("server enabled"))
-        }
-
-        "disable_server" => {
-            let server_id = args
-                .get("server_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "missing 'server_id' argument".to_string())?;
-
-            tools
-                .disable_server(env_id, server_id)
-                .await
-                .map_err(|e| e.to_string())?;
-
-            Ok(wrap_content("server disabled"))
-        }
-
-        _ => Err(format!("unknown tool: {tool_name}")),
+    if env_id == GLOBAL_ENV {
+        state.plugmux.call_tool(name, args).await
+    } else {
+        state.proxy.call_tool(name, args).await
     }
 }
 
-/// Wrap a text string into the MCP content format.
-fn wrap_content(text: &str) -> Value {
-    json!({
-        "content": [
-            {
-                "type": "text",
-                "text": text,
+async fn dispatch_resources_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
+    let resources: Vec<ResourceInfo> = if env_id == GLOBAL_ENV {
+        state.plugmux.list_resources()
+    } else {
+        state.proxy.list_resources(env_id).await?
+    };
+
+    let resources_json: Vec<Value> = resources
+        .into_iter()
+        .map(|r| {
+            let mut obj = json!({
+                "uri": r.uri,
+                "name": r.name,
+            });
+            if let Some(desc) = r.description {
+                obj["description"] = json!(desc);
             }
-        ]
-    })
+            if let Some(mime) = r.mime_type {
+                obj["mimeType"] = json!(mime);
+            }
+            obj
+        })
+        .collect();
+
+    Ok(json!({ "resources": resources_json }))
+}
+
+async fn dispatch_resources_read(
+    state: &AppState,
+    env_id: &str,
+    params: &Value,
+) -> Result<Value, ProxyError> {
+    let uri = params.get("uri").and_then(|u| u.as_str()).ok_or_else(|| {
+        ProxyError::Transport("missing 'uri' in resources/read params".to_string())
+    })?;
+
+    if env_id == GLOBAL_ENV {
+        state.plugmux.read_resource(uri).await
+    } else {
+        state.proxy.read_resource(uri).await
+    }
+}
+
+async fn dispatch_prompts_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
+    if env_id == GLOBAL_ENV {
+        // Plugmux layer does not expose prompts.
+        Ok(json!({ "prompts": [] }))
+    } else {
+        let prompts: Vec<PromptInfo> = state.proxy.list_prompts(env_id).await?;
+
+        let prompts_json: Vec<Value> = prompts
+            .into_iter()
+            .map(|p| {
+                let args_json: Vec<Value> = p
+                    .arguments
+                    .into_iter()
+                    .map(|a| {
+                        let mut obj = json!({ "name": a.name, "required": a.required });
+                        if let Some(desc) = a.description {
+                            obj["description"] = json!(desc);
+                        }
+                        obj
+                    })
+                    .collect();
+
+                let mut obj = json!({
+                    "name": p.name,
+                    "arguments": args_json,
+                });
+                if let Some(desc) = p.description {
+                    obj["description"] = json!(desc);
+                }
+                obj
+            })
+            .collect();
+
+        Ok(json!({ "prompts": prompts_json }))
+    }
+}
+
+async fn dispatch_prompts_get(
+    state: &AppState,
+    env_id: &str,
+    params: &Value,
+) -> Result<Value, ProxyError> {
+    if env_id == GLOBAL_ENV {
+        return Err(ProxyError::Transport(
+            "prompts are not available on the global environment".to_string(),
+        ));
+    }
+
+    let name = params
+        .get("name")
+        .and_then(|n| n.as_str())
+        .ok_or_else(|| ProxyError::Transport("missing 'name' in prompts/get params".to_string()))?;
+
+    let args = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
+
+    state.proxy.get_prompt(name, args).await
 }

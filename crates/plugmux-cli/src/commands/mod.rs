@@ -1,4 +1,7 @@
+pub mod agents;
+pub mod catalog;
 pub mod config;
+pub mod custom;
 pub mod env;
 pub mod server;
 pub mod start;

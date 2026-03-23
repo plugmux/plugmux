@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "web-dev",
+      "name": "Web Development",
+      "description": "Frontend and full-stack web development",
+      "icon": "web-dev.svg",
+      "servers": ["figma", "shadcn", "context7"]
+    },
+    {
+      "id": "data-work",
+      "name": "Data Work",
+      "description": "Database querying and data exploration",
+      "icon": "data-work.svg",
+      "servers": ["postgres", "sqlite", "filesystem"]
+    },
+    {
+      "id": "research",
+      "name": "Research",
+      "description": "Web research and documentation lookup",
+      "icon": "research.svg",
+      "servers": ["brave-search", "context7", "memory"]
+    },
+    {
+      "id": "productivity",
+      "name": "Productivity",
+      "description": "Communication and file management",
+      "icon": "productivity.svg",
+      "servers": ["slack", "google-drive", "memory"]
+    }
+  ]
+}

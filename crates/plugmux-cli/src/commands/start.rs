@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
-use plugmux_core::environment::resolve_named;
+use plugmux_core::custom_servers::CustomServerStore;
 use plugmux_core::gateway::router;
 use plugmux_core::manager::ServerManager;
+use plugmux_core::migration;
+use plugmux_core::resolver::ServerResolver;
 
 const BANNER: &str = r#"
            __
@@ -16,42 +19,55 @@ const BANNER: &str = r#"
 /_/            /____/
 "#;
 
-/// Default gateway port.
-const DEFAULT_PORT: u16 = 4242;
-
 pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
-    let port = port.unwrap_or(DEFAULT_PORT);
-
-    // 1. Load config
-    let cfg_path = config::config_path();
-    let cfg = config::load_or_default(&cfg_path)?;
-
-    let manager = Arc::new(ServerManager::new());
-
-    // 2. Start all enabled Main servers
-    for server in &cfg.main.servers {
-        if server.enabled && let Err(e) = manager.start_server(server.clone()).await {
-            eprintln!("  [warn] failed to start main server '{}': {}", server.id, e);
-        }
+    // 1. Check for migration
+    let catalog = CatalogRegistry::load_bundled();
+    if migration::needs_migration() {
+        println!("  Migrating config from Phase 2 to Phase 3...");
+        migration::migrate(&catalog)?;
+        println!("  Migration complete.");
     }
 
-    // 3. Start all enabled environment-specific servers
+    // 2. Load config
+    let cfg_path = config::config_path();
+    let cfg = config::load_or_default(&cfg_path);
+    let port = port.unwrap_or(cfg.port);
+
+    // 3. Load custom servers
+    let custom_path = config::config_dir().join("custom_servers.json");
+    let custom_store = CustomServerStore::load_or_default(custom_path);
+
+    // 4. Create resolver
+    let catalog = Arc::new(catalog);
+    let custom = Arc::new(std::sync::RwLock::new(custom_store));
+    let resolver = ServerResolver::new(Arc::clone(&catalog), Arc::clone(&custom));
+
+    // 5. Start servers for each environment
+    let manager = Arc::new(ServerManager::new());
+
     for env in &cfg.environments {
-        let resolved = resolve_named(&cfg, &env.id).unwrap_or_default();
+        let resolved = resolver.resolve_all(&env.servers);
         for rs in &resolved {
-            // Only start env-specific servers (main servers already started above)
-            if rs.source == plugmux_core::environment::ServerSource::Environment
-                && let Err(e) = manager.start_server(rs.config.clone()).await
-            {
+            if let Some(server_config) = &rs.config {
+                // Only start if not already running (avoid duplicate starts across envs)
+                if !manager.is_healthy(&rs.id).await
+                    && let Err(e) = manager.start_server(server_config.clone()).await
+                {
+                    eprintln!(
+                        "  [warn] failed to start server '{}' for env '{}': {}",
+                        rs.id, env.id, e
+                    );
+                }
+            } else {
                 eprintln!(
-                    "  [warn] failed to start server '{}' for env '{}': {}",
-                    rs.config.id, env.id, e
+                    "  [warn] server '{}' in env '{}' not found in catalog or custom servers",
+                    rs.id, env.id
                 );
             }
         }
     }
 
-    // 4. Print banner and environment URLs
+    // 6. Print banner and environment URLs
     println!("{BANNER}");
     println!("  plugmux v{}", env!("CARGO_PKG_VERSION"));
     println!("  gateway: http://127.0.0.1:{port}");
@@ -69,9 +85,11 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // 5. Start axum server
+    // 7. Start axum server
+    let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
+        .map_err(|e| format!("failed to open database: {e}"))?;
     let config = Arc::new(RwLock::new(cfg));
-    router::start_server(config, manager, port).await?;
+    router::start_server(config, manager, port, Some(db)).await?;
 
     Ok(())
 }

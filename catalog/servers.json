@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "servers": [
+    {
+      "id": "figma",
+      "name": "Figma",
+      "description": "Read and inspect Figma designs and components",
+      "icon": "figma.svg",
+      "category": "design",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@anthropic/figma-mcp"],
+      "connectivity": "online"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Interact with GitHub repositories, issues, pull requests, and code",
+      "icon": "github.svg",
+      "category": "dev-tools",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "connectivity": "online"
+    },
+    {
+      "id": "filesystem",
+      "name": "Filesystem",
+      "description": "Read and write files on the local filesystem",
+      "icon": "filesystem.svg",
+      "category": "dev-tools",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "connectivity": "local"
+    },
+    {
+      "id": "context7",
+      "name": "Context7",
+      "description": "Up-to-date documentation and code examples for any library",
+      "icon": "context7.svg",
+      "category": "dev-tools",
+      "transport": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "connectivity": "online"
+    },
+    {
+      "id": "shadcn",
+      "name": "shadcn/ui",
+      "description": "Browse and add shadcn/ui components to your project",
+      "icon": "shadcn.svg",
+      "category": "dev-tools",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@shadcn/mcp"],
+      "connectivity": "online"
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "description": "Query and inspect PostgreSQL databases",
+      "icon": "postgres.svg",
+      "category": "database",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "connectivity": "local"
+    },
+    {
+      "id": "sqlite",
+      "name": "SQLite",
+      "description": "Query and manage SQLite database files",
+      "icon": "sqlite.svg",
+      "category": "database",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite"],
+      "connectivity": "local"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "description": "Search the web using the Brave Search API",
+      "icon": "brave-search.svg",
+      "category": "browser",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "connectivity": "online"
+    },
+    {
+      "id": "puppeteer",
+      "name": "Puppeteer",
+      "description": "Control a headless browser for web automation and scraping",
+      "icon": "puppeteer.svg",
+      "category": "browser",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "connectivity": "online"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Send messages and interact with Slack workspaces",
+      "icon": "slack.svg",
+      "category": "productivity",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "connectivity": "online"
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "description": "Read and search files stored in Google Drive",
+      "icon": "google-drive.svg",
+      "category": "productivity",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "connectivity": "online"
+    },
+    {
+      "id": "memory",
+      "name": "Memory",
+      "description": "Persistent knowledge graph memory across conversations",
+      "icon": "memory.svg",
+      "category": "ai",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "connectivity": "local"
+    }
+  ]
+}

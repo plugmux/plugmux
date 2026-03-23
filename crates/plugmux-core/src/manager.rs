@@ -12,14 +12,14 @@ use tracing::{info, warn};
 
 use crate::proxy::http_sse::HttpSseMcpClient;
 use crate::proxy::stdio::StdioMcpClient;
-use crate::proxy::{McpClient, ProxyError, ToolInfo};
-use crate::server::{ServerConfig, Transport};
+use crate::proxy::{McpClient, PromptInfo, ProxyError, ResourceInfo, ToolInfo};
+use crate::server::{HealthStatus, ServerConfig, Transport};
 
 /// A running MCP server together with its configuration and health status.
 pub struct ManagedServer {
     pub config: ServerConfig,
     pub client: Box<dyn McpClient>,
-    pub healthy: bool,
+    pub health: HealthStatus,
 }
 
 /// Owns all running MCP client connections.
@@ -59,9 +59,7 @@ impl ServerManager {
                 let url = config
                     .url
                     .as_deref()
-                    .ok_or_else(|| {
-                        ProxyError::Transport("http transport requires a url".into())
-                    })?
+                    .ok_or_else(|| ProxyError::Transport("http transport requires a url".into()))?
                     .to_string();
                 Box::new(HttpSseMcpClient::new(url))
             }
@@ -73,7 +71,7 @@ impl ServerManager {
         let managed = ManagedServer {
             config,
             client,
-            healthy: true,
+            health: HealthStatus::Healthy,
         };
 
         self.servers.write().await.insert(id.clone(), managed);
@@ -84,9 +82,9 @@ impl ServerManager {
     /// Stop a server: shut down the client and remove it from the managed set.
     pub async fn stop_server(&self, id: &str) -> Result<(), ProxyError> {
         let mut map = self.servers.write().await;
-        let mut managed = map.remove(id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {id}"))
-        })?;
+        let mut managed = map
+            .remove(id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {id}")))?;
 
         info!(server_id = %id, "stopping server");
         managed.client.shutdown().await?;
@@ -94,13 +92,20 @@ impl ServerManager {
         Ok(())
     }
 
+    /// Look up a managed server by ID, returning an error if not found.
+    fn get_server<'a>(
+        &self,
+        map: &'a HashMap<String, ManagedServer>,
+        server_id: &str,
+    ) -> Result<&'a ManagedServer, ProxyError> {
+        map.get(server_id)
+            .ok_or_else(|| ProxyError::Transport(format!("server not found: {server_id}")))
+    }
+
     /// List all tools exposed by a specific server.
     pub async fn list_tools(&self, server_id: &str) -> Result<Vec<ToolInfo>, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
-        managed.client.list_tools().await
+        self.get_server(&map, server_id)?.client.list_tools().await
     }
 
     /// Call a tool on a specific server.
@@ -111,31 +116,92 @@ impl ServerManager {
         args: Value,
     ) -> Result<Value, ProxyError> {
         let map = self.servers.read().await;
-        let managed = map.get(server_id).ok_or_else(|| {
-            ProxyError::Transport(format!("server not found: {server_id}"))
-        })?;
-        managed.client.call_tool(tool_name, args).await
+        self.get_server(&map, server_id)?
+            .client
+            .call_tool(tool_name, args)
+            .await
+    }
+
+    /// List all resources exposed by a specific server.
+    pub async fn list_resources(&self, server_id: &str) -> Result<Vec<ResourceInfo>, ProxyError> {
+        let map = self.servers.read().await;
+        self.get_server(&map, server_id)?
+            .client
+            .list_resources()
+            .await
+    }
+
+    /// Read a resource from a specific server.
+    pub async fn read_resource(&self, server_id: &str, uri: &str) -> Result<Value, ProxyError> {
+        let map = self.servers.read().await;
+        self.get_server(&map, server_id)?
+            .client
+            .read_resource(uri)
+            .await
+    }
+
+    /// List all prompts exposed by a specific server.
+    pub async fn list_prompts(&self, server_id: &str) -> Result<Vec<PromptInfo>, ProxyError> {
+        let map = self.servers.read().await;
+        self.get_server(&map, server_id)?
+            .client
+            .list_prompts()
+            .await
+    }
+
+    /// Get a prompt from a specific server.
+    pub async fn get_prompt(
+        &self,
+        server_id: &str,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, ProxyError> {
+        let map = self.servers.read().await;
+        self.get_server(&map, server_id)?
+            .client
+            .get_prompt(name, args)
+            .await
+    }
+
+    /// Send roots to specific servers (scoped to an environment's server list).
+    pub async fn broadcast_roots(&self, server_ids: &[String], roots: Value) {
+        let map = self.servers.read().await;
+        for id in server_ids {
+            if let Some(managed) = map.get(id)
+                && let Err(e) = managed.client.send_roots(roots.clone()).await
+            {
+                tracing::warn!(server_id = %id, error = %e, "failed to send roots");
+            }
+        }
     }
 
     /// List all managed servers with their health status.
-    pub async fn list_servers(&self) -> Vec<(String, bool)> {
+    pub async fn list_servers(&self) -> Vec<(String, HealthStatus)> {
         let map = self.servers.read().await;
         map.iter()
-            .map(|(id, ms)| (id.clone(), ms.healthy))
+            .map(|(id, ms)| (id.clone(), ms.health.clone()))
             .collect()
     }
 
     /// Check whether a specific server is healthy.
     pub async fn is_healthy(&self, server_id: &str) -> bool {
         let map = self.servers.read().await;
-        map.get(server_id).map(|ms| ms.healthy).unwrap_or(false)
+        map.get(server_id)
+            .map(|ms| matches!(ms.health, HealthStatus::Healthy))
+            .unwrap_or(false)
+    }
+
+    /// Get the health status of a specific server.
+    pub async fn get_health(&self, server_id: &str) -> Option<HealthStatus> {
+        let map = self.servers.read().await;
+        map.get(server_id).map(|ms| ms.health.clone())
     }
 
     /// Update the health status of a specific server.
-    pub async fn set_health(&self, id: &str, healthy: bool) {
+    pub async fn set_health(&self, id: &str, health: HealthStatus) {
         let mut map = self.servers.write().await;
         if let Some(ms) = map.get_mut(id) {
-            ms.healthy = healthy;
+            ms.health = health;
         }
     }
 
