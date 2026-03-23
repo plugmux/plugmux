@@ -48,9 +48,8 @@ impl LogEntry {
 pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), Box<redb::Error>> {
     #[allow(clippy::result_large_err)]
     fn inner(db: &Arc<Db>, entry: &LogEntry) -> Result<(), redb::Error> {
-        let json = serde_json::to_string(entry).map_err(|e| {
-            redb::Error::Io(std::io::Error::other(e.to_string()))
-        })?;
+        let json = serde_json::to_string(entry)
+            .map_err(|e| redb::Error::Io(std::io::Error::other(e.to_string())))?;
         let write_txn = db.inner.begin_write()?;
         {
             let mut table = write_txn.open_table(LOGS_TABLE)?;
