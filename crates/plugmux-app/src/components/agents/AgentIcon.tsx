@@ -1,56 +1,35 @@
-// Import all available icons - prefer color, fallback to mono
-// For color icons:
-import antigravityColor from "@/assets/agent-icons/antigravity-color.svg";
-import cherrystudioColor from "@/assets/agent-icons/cherrystudio-color.svg";
-import claudecodeColor from "@/assets/agent-icons/claudecode-color.svg";
-import codexColor from "@/assets/agent-icons/codex-color.svg";
-import copilotColor from "@/assets/agent-icons/copilot-color.svg";
-import difyColor from "@/assets/agent-icons/dify-color.svg";
-import geminiColor from "@/assets/agent-icons/gemini-color.svg";
-import junieColor from "@/assets/agent-icons/junie-color.svg";
-import monicaColor from "@/assets/agent-icons/monica-color.svg";
-import n8nColor from "@/assets/agent-icons/n8n-color.svg";
-import openhandsColor from "@/assets/agent-icons/openhands-color.svg";
-import poeColor from "@/assets/agent-icons/poe-color.svg";
-import traeColor from "@/assets/agent-icons/trae-color.svg";
+import antigravity from "@assets/agent-icons/antigravity.svg";
+import chatgpt from "@assets/agent-icons/chatgpt.svg";
+import cherrystudio from "@assets/agent-icons/cherrystudio.svg";
+import claude from "@assets/agent-icons/claude.svg";
+import claudecode from "@assets/agent-icons/claudecode.svg";
+import cline from "@assets/agent-icons/cline.svg";
+import codex from "@assets/agent-icons/codex.svg";
+import copilot from "@assets/agent-icons/copilot.svg";
+import coze from "@assets/agent-icons/coze.svg";
+import cursor from "@assets/agent-icons/cursor.svg";
+import dify from "@assets/agent-icons/dify.svg";
+import gemini from "@assets/agent-icons/gemini.svg";
+import githubcopilot from "@assets/agent-icons/githubcopilot.svg";
+import goose from "@assets/agent-icons/goose.svg";
+import junie from "@assets/agent-icons/junie.svg";
+import lmstudio from "@assets/agent-icons/lmstudio.svg";
+import monica from "@assets/agent-icons/monica.svg";
+import n8n from "@assets/agent-icons/n8n.svg";
+import opencode from "@assets/agent-icons/opencode.svg";
+import openhands from "@assets/agent-icons/openhands.svg";
+import openwebui from "@assets/agent-icons/openwebui.svg";
+import poe from "@assets/agent-icons/poe.svg";
+import roocode from "@assets/agent-icons/roocode.svg";
+import trae from "@assets/agent-icons/trae.svg";
+import vscode from "@assets/agent-icons/vscode.svg";
+import windsurf from "@assets/agent-icons/windsurf.svg";
+import zed from "@assets/agent-icons/zed.svg";
 
-// For mono icons (used when no color variant exists):
-import cursor from "@/assets/agent-icons/cursor.svg";
-import windsurf from "@/assets/agent-icons/windsurf.svg";
-import githubcopilot from "@/assets/agent-icons/githubcopilot.svg";
-import cline from "@/assets/agent-icons/cline.svg";
-import roocode from "@/assets/agent-icons/roocode.svg";
-import goose from "@/assets/agent-icons/goose.svg";
-import opencode from "@/assets/agent-icons/opencode.svg";
-import lmstudio from "@/assets/agent-icons/lmstudio.svg";
-import openwebui from "@/assets/agent-icons/openwebui.svg";
-import coze from "@/assets/agent-icons/coze.svg";
-
-// Map icon field name → imported asset (prefer color)
 const icons: Record<string, string> = {
-  antigravity: antigravityColor,
-  cherrystudio: cherrystudioColor,
-  claudecode: claudecodeColor,
-  codex: codexColor,
-  copilot: copilotColor,
-  dify: difyColor,
-  gemini: geminiColor,
-  junie: junieColor,
-  monica: monicaColor,
-  n8n: n8nColor,
-  openhands: openhandsColor,
-  poe: poeColor,
-  trae: traeColor,
-  cursor: cursor,
-  windsurf: windsurf,
-  githubcopilot: githubcopilot,
-  cline: cline,
-  roocode: roocode,
-  goose: goose,
-  opencode: opencode,
-  lmstudio: lmstudio,
-  openwebui: openwebui,
-  coze: coze,
+  antigravity, chatgpt, cherrystudio, claude, claudecode, cline, codex, copilot, coze,
+  cursor, dify, gemini, githubcopilot, goose, junie, lmstudio, monica,
+  n8n, opencode, openhands, openwebui, poe, roocode, trae, vscode, windsurf, zed,
 };
 
 interface AgentIconProps {
@@ -61,32 +40,21 @@ interface AgentIconProps {
 
 export function AgentIcon({ icon, name, className = "h-5 w-5" }: AgentIconProps) {
   if (icon && icons[icon]) {
-    // Monochrome icons need the invert filter for dark mode
-    const needsFilter = ["cursor", "windsurf", "githubcopilot", "cline", "roocode", "goose", "opencode", "lmstudio", "openwebui", "coze"].includes(icon);
     return (
       <img
         src={icons[icon]}
         alt={name}
-        className={className}
-        style={needsFilter ? { filter: "brightness(0) invert(1)" } : undefined}
+        className={`dark:invert ${className}`}
       />
     );
   }
 
-  // 2-letter thumbnail fallback
   const initials = name.slice(0, 2).toUpperCase();
-  // Generate consistent color from name hash
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash) % 360;
-  const bg = `hsl(${hue}, 50%, 30%)`;
 
   return (
     <div
-      className={`flex items-center justify-center rounded-full text-white text-[10px] font-bold ${className}`}
-      style={{ backgroundColor: bg }}
+      className={`flex items-center justify-center rounded-md bg-foreground/80 text-background text-[10px] font-bold dark:bg-white/80 dark:text-black ${className}`}
+      style={{ width: 24, height: 24, minWidth: 24, minHeight: 24 }}
     >
       {initials}
     </div>

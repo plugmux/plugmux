@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Cable, ArrowRightIcon, Plus } from "lucide-react";
+import { Cable, ArrowRightIcon, Plus, RefreshCw } from "lucide-react";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
@@ -62,7 +62,7 @@ export function AgentsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 px-6 pt-4 pb-6">
       {/* Onboarding banner */}
       {!hasConnected && (
         <Banner
@@ -88,23 +88,36 @@ export function AgentsPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Agents</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Agents</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground"
+            onClick={reload}
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => setAddAgentOpen(true)}
         >
           <Plus className="h-4 w-4" />
-          Add agent
+          Add custom agent
         </Button>
       </div>
 
-      {/* Agent table */}
+      {/* Agent table — all registry agents */}
       <AgentTable
         agents={agents}
         onConnect={handleConnect}
         onDisable={openDisableDialog}
         onDelete={handleDelete}
+        onConfigure={() => {
+          // TODO: show manual configuration instructions
+        }}
       />
 
       {/* Disable dialog */}
@@ -130,7 +143,6 @@ export function AgentsPage() {
       <AddAgentDialog
         open={addAgentOpen}
         onOpenChange={setAddAgentOpen}
-        existingAgentIds={agents.map((a) => a.id)}
         onAdded={reload}
       />
     </div>

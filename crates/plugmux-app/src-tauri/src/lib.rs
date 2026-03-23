@@ -77,7 +77,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
-                builder = builder.traffic_light_position(tauri::LogicalPosition::new(12.0, 25.0));
+                builder = builder.traffic_light_position(tauri::LogicalPosition::new(12.0, 27.0));
             }
 
             let window = builder.build()?;

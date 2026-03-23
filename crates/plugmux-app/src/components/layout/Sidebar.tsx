@@ -1,14 +1,16 @@
-import {
-  Layers,
-  BookOpen,
-  Cable,
-  Settings,
-  Plus,
-} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useConfig } from "@/hooks/useConfig";
+
+import terminalIcon from "@assets/icons/terminal.svg";
+import mcpIcon from "@assets/icons/mcp.svg";
+import layersIcon from "@assets/icons/layers.svg";
+import plusIcon from "@assets/icons/plus.svg";
+import settingsIcon from "@assets/icons/settings.svg";
+
+function Icon({ src, className = "h-4 w-4" }: { src: string; className?: string }) {
+  return <img src={src} alt="" className={`dark:invert ${className}`} />;
+}
 
 interface SidebarProps {
   activePage: string;
@@ -25,7 +27,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full w-[220px] flex-col border-r bg-muted/30">
-      <nav className="flex flex-1 flex-col gap-1 px-2 pt-3">
+      <nav className="flex flex-1 flex-col gap-1 px-2 pt-4">
         <button
           onClick={() => onNavigate("agents")}
           className={cn(
@@ -35,7 +37,7 @@ export function Sidebar({
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
-          <Cable className="h-4 w-4" />
+          <Icon src={terminalIcon} />
           Agents
         </button>
         <button
@@ -47,8 +49,8 @@ export function Sidebar({
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
-          <BookOpen className="h-4 w-4" />
-          Catalog
+          <Icon src={mcpIcon} />
+          MCP Servers
         </button>
         {/* Environments section */}
         <div className="mt-4">
@@ -56,14 +58,12 @@ export function Sidebar({
             <span className="text-xs font-medium uppercase text-muted-foreground">
               Environments
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5"
+            <button
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               onClick={onNewEnvironment}
             >
-              <Plus className="h-3 w-3" />
-            </Button>
+              <Icon src={plusIcon} className="h-3 w-3" />
+            </button>
           </div>
 
           {/* Default environment */}
@@ -77,7 +77,7 @@ export function Sidebar({
             )}
           >
             <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4" />
+              <Icon src={layersIcon} />
               <span className="truncate">Default</span>
             </div>
           </button>
@@ -100,7 +100,7 @@ export function Sidebar({
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4" />
+                    <Icon src={layersIcon} />
                     <span className="truncate">{env.name}</span>
                   </div>
                   <Badge variant="secondary" className="h-5 px-1.5 text-xs">
@@ -122,7 +122,7 @@ export function Sidebar({
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            <Settings className="h-4 w-4" />
+            <Icon src={settingsIcon} />
             Settings
           </button>
         </div>

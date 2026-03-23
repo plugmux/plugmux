@@ -42,19 +42,23 @@ struct AgentData {
 }
 
 pub struct AgentRegistry {
-    agents: HashMap<String, AgentEntry>,
+    ordered: Vec<AgentEntry>,
+    index: HashMap<String, usize>,
 }
 
 impl AgentRegistry {
     pub fn load(json: &str) -> Result<Self, serde_json::Error> {
         let data: AgentData = serde_json::from_str(json)?;
 
-        let mut agents = HashMap::new();
-        for entry in data.agents {
-            agents.insert(entry.id.clone(), entry);
+        let mut index = HashMap::new();
+        for (i, entry) in data.agents.iter().enumerate() {
+            index.insert(entry.id.clone(), i);
         }
 
-        Ok(Self { agents })
+        Ok(Self {
+            ordered: data.agents,
+            index,
+        })
     }
 
     pub fn load_bundled() -> Self {
@@ -62,19 +66,26 @@ impl AgentRegistry {
         Self::load(json).expect("Bundled agents.json is valid JSON")
     }
 
+    /// Returns all agents in registry order (as defined in agents.json).
     pub fn list_agents(&self) -> Vec<&AgentEntry> {
-        self.agents.values().collect()
+        self.ordered.iter().collect()
     }
 
+    /// Returns auto-tier agents in registry order.
     pub fn list_auto_agents(&self) -> Vec<&AgentEntry> {
-        self.agents
-            .values()
+        self.ordered
+            .iter()
             .filter(|a| a.tier == AgentTier::Auto)
             .collect()
     }
 
     pub fn get_agent(&self, id: &str) -> Option<&AgentEntry> {
-        self.agents.get(id)
+        self.index.get(id).map(|&i| &self.ordered[i])
+    }
+
+    /// Returns the position of an agent in the registry order.
+    pub fn position(&self, id: &str) -> Option<usize> {
+        self.index.get(id).copied()
     }
 
     pub fn resolve_config_path(&self, agent: &AgentEntry) -> Option<PathBuf> {
@@ -187,7 +198,7 @@ mod tests {
     #[test]
     fn test_load_from_json_string() {
         let registry = make_registry();
-        assert_eq!(registry.agents.len(), 4);
+        assert_eq!(registry.list_agents().len(), 4);
     }
 
     #[test]

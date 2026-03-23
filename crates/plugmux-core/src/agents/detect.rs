@@ -137,8 +137,8 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
     let mut seen = std::collections::HashSet::new();
     let mut results = Vec::new();
 
-    // Scan all auto-tier agents from registry
-    for entry in registry.list_auto_agents() {
+    // Include all agents from registry (auto + manual)
+    for entry in registry.list_agents() {
         if state.is_dismissed(&entry.id) {
             continue;
         }
@@ -195,6 +195,9 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
         seen.insert(state_entry.id.clone());
     }
 
+    // Sort by registry order — agents in the registry come first in their defined order,
+    // custom/unknown agents sort to the end.
+    results.sort_by_key(|a| registry.position(&a.id).unwrap_or(usize::MAX));
     results
 }
 

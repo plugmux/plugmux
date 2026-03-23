@@ -43,7 +43,7 @@ export function SettingsPage() {
     setAutostart(checked);
   };
 
-  // Dark mode
+  // Dark mode (persisted in localStorage)
   const [dark, setDark] = useState(
     () => document.documentElement.classList.contains("dark"),
   );
@@ -51,8 +51,12 @@ export function SettingsPage() {
     setDark(checked);
     if (checked) {
       document.documentElement.classList.add("dark");
+      document.body.classList.add("dark");
+      localStorage.setItem("plugmux-theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+      localStorage.setItem("plugmux-theme", "light");
     }
   };
 

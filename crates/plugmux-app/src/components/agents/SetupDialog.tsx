@@ -386,7 +386,7 @@ export function SetupDialog({
                 {hasResults ? (
                   <Button
                     onClick={handleDone}
-                    className="bg-[#7A67D1] hover:bg-[#6A57C1]"
+                    className="bg-primary hover:bg-primary/90"
                   >
                     Done
                   </Button>
@@ -396,7 +396,7 @@ export function SetupDialog({
                     disabled={
                       scanning || connecting || selectedAgents.size === 0
                     }
-                    className="bg-[#7A67D1] hover:bg-[#6A57C1]"
+                    className="bg-primary hover:bg-primary/90"
                   >
                     Connect
                   </Button>
@@ -521,7 +521,7 @@ export function SetupDialog({
                 </Button>
                 <Button
                   onClick={handleDone}
-                  className="bg-[#7A67D1] hover:bg-[#6A57C1]"
+                  className="bg-primary hover:bg-primary/90"
                 >
                   Done
                 </Button>

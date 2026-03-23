@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   detectAgents,
+  getAgentRegistry,
   connectAgent,
   disconnectAgent,
   dismissAgent,
@@ -13,7 +14,17 @@ export function useAgents() {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const detected = await detectAgents();
+    const [detected, registry] = await Promise.all([
+      detectAgents(),
+      getAgentRegistry(),
+    ]);
+    // Sort by registry order (agents.json defines canonical order)
+    const orderMap = new Map(registry.map((a, i) => [a.id, i]));
+    detected.sort((a, b) => {
+      const ia = orderMap.get(a.id) ?? Infinity;
+      const ib = orderMap.get(b.id) ?? Infinity;
+      return ia - ib;
+    });
     setAgents(detected);
     setLoading(false);
   }, []);

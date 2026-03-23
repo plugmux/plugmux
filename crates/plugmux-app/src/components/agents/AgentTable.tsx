@@ -1,6 +1,13 @@
 import { Trash2 } from "lucide-react";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { DetectedAgent } from "@/lib/commands";
 
 const statusColor: Record<DetectedAgent["status"], string> = {
@@ -9,11 +16,103 @@ const statusColor: Record<DetectedAgent["status"], string> = {
   gray: "bg-gray-500",
 };
 
+const statusTooltip: Record<DetectedAgent["status"], string> = {
+  green: "Connected",
+  yellow: "Connected (manually configured)",
+  gray: "Not connected",
+};
+
 interface AgentTableProps {
   agents: DetectedAgent[];
   onConnect: (id: string) => void;
   onDisable: (agent: DetectedAgent) => void;
   onDelete: (agent: DetectedAgent) => void;
+  onConfigure?: (agent: DetectedAgent) => void;
+}
+
+function AgentRow({
+  agent,
+  onConnect,
+  onDisable,
+  onDelete,
+  onConfigure,
+}: {
+  agent: DetectedAgent;
+  onConnect: (id: string) => void;
+  onDisable: (agent: DetectedAgent) => void;
+  onDelete: (agent: DetectedAgent) => void;
+  onConfigure?: (agent: DetectedAgent) => void;
+}) {
+  const isConnected = agent.status === "green" || agent.status === "yellow";
+  const isInstalled = agent.installed;
+  const isManualOnly = !isInstalled && !agent.config_path;
+
+  return (
+    <div
+      className={`flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5 ${!isInstalled ? "opacity-50" : ""}`}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`h-2 w-2 shrink-0 cursor-pointer rounded-full ${statusColor[agent.status]}`}
+          />
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{statusTooltip[agent.status]}</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <AgentIcon icon={agent.icon} name={agent.name} />
+
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{agent.name}</p>
+        {isInstalled && agent.config_path && (
+          <p className="truncate text-xs text-muted-foreground">
+            {agent.config_path}
+          </p>
+        )}
+      </div>
+
+      {/* Installed agents with config: show switch */}
+      {isInstalled && (
+        <Switch
+          checked={isConnected}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              onConnect(agent.id);
+            } else {
+              onDisable(agent);
+            }
+          }}
+          className="data-[state=checked]:bg-primary"
+        />
+      )}
+
+      {/* Manual-only agents (no config path, like ChatGPT): show Configure button */}
+      {isManualOnly && onConfigure && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs"
+          onClick={() => onConfigure(agent)}
+        >
+          Configure
+        </Button>
+      )}
+
+      {/* Delete — only for custom agents */}
+      {agent.source === "custom" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground"
+          onClick={() => onDelete(agent)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export function AgentTable({
@@ -21,61 +120,52 @@ export function AgentTable({
   onConnect,
   onDisable,
   onDelete,
+  onConfigure,
 }: AgentTableProps) {
+  const installed = agents.filter((a) => a.installed);
+  const notInstalled = agents.filter((a) => !a.installed);
+
   return (
-    <div className="space-y-1">
-      {agents.map((agent) => (
-        <div
-          key={agent.id}
-          className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-accent"
-        >
-          {/* Status dot */}
-          <span
-            className={`h-2 w-2 shrink-0 rounded-full ${statusColor[agent.status]}`}
-          />
-
-          {/* Agent icon */}
-          <AgentIcon icon={agent.icon} name={agent.name} />
-
-          {/* Name + config path */}
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{agent.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {agent.config_path ?? "Not configured"}
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-6">
+        {/* Installed / configured agents */}
+        {installed.length > 0 && (
+          <div className="space-y-1">
+            <p className="px-1 pb-1 text-xs font-medium uppercase text-muted-foreground">
+              Configuration found
             </p>
+            {installed.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                onConnect={onConnect}
+                onDisable={onDisable}
+                onDelete={onDelete}
+                onConfigure={onConfigure}
+              />
+            ))}
           </div>
+        )}
 
-          {/* Enable / Disable toggle */}
-          {agent.status === "gray" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onConnect(agent.id)}
-            >
-              Connect
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="text-xs"
-              onClick={() => onDisable(agent)}
-            >
-              Enabled
-            </Button>
-          )}
-
-          {/* Delete */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground"
-            onClick={() => onDelete(agent)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ))}
-    </div>
+        {/* Not installed agents */}
+        {notInstalled.length > 0 && (
+          <div className="space-y-1">
+            <p className="px-1 pb-1 text-xs font-medium uppercase text-muted-foreground">
+              Other supported agents
+            </p>
+            {notInstalled.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                onConnect={onConnect}
+                onDisable={onDisable}
+                onDelete={onDelete}
+                onConfigure={onConfigure}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
