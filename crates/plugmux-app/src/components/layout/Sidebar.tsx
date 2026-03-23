@@ -31,10 +31,10 @@ export function Sidebar({
         <button
           onClick={() => onNavigate("agents")}
           className={cn(
-            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            "flex items-center gap-2 rounded-md border-l-[3px] px-2 py-1.5 text-sm",
             activePage === "agents"
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              ? "border-primary bg-accent text-accent-foreground"
+              : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
           <Icon src={terminalIcon} />
@@ -43,10 +43,10 @@ export function Sidebar({
         <button
           onClick={() => onNavigate("catalog")}
           className={cn(
-            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+            "flex items-center gap-2 rounded-md border-l-[3px] px-2 py-1.5 text-sm",
             activePage === "catalog"
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              ? "border-primary bg-accent text-accent-foreground"
+              : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
           )}
         >
           <Icon src={mcpIcon} />
@@ -70,10 +70,10 @@ export function Sidebar({
           <button
             onClick={() => onNavigate("env:default")}
             className={cn(
-              "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
+              "flex w-full items-center justify-between rounded-md border-l-[3px] px-2 py-1.5 text-sm",
               activePage === "env:default"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                ? "border-primary bg-accent text-accent-foreground"
+                : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             <div className="flex items-center gap-2">
@@ -93,10 +93,10 @@ export function Sidebar({
                   key={env.id}
                   onClick={() => onNavigate(page)}
                   className={cn(
-                    "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm",
+                    "flex w-full items-center justify-between rounded-md border-l-[3px] px-2 py-1.5 text-sm",
                     activePage === page
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      ? "border-primary bg-accent text-accent-foreground"
+                      : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -116,10 +116,10 @@ export function Sidebar({
           <button
             onClick={() => onNavigate("settings")}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+              "flex w-full items-center gap-2 rounded-md border-l-[3px] px-2 py-1.5 text-sm",
               activePage === "settings"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                ? "border-primary bg-accent text-accent-foreground"
+                : "border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
             <Icon src={settingsIcon} />
