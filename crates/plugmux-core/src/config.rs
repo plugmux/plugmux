@@ -17,8 +17,8 @@ pub enum ConfigError {
     Json(#[from] serde_json::Error),
     #[error("Environment not found: {0}")]
     EnvironmentNotFound(String),
-    #[error("Cannot delete the default environment")]
-    CannotDeleteDefault,
+    #[error("Cannot delete the global environment")]
+    CannotDeleteGlobal,
     #[error("ID collision: {0}")]
     IdCollision(String),
 }
@@ -96,14 +96,21 @@ pub fn config_path() -> PathBuf {
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-/// Ensures a "default" environment exists in `config`. Adds one if missing.
-pub fn ensure_default(config: &mut Config) {
-    if !config.environments.iter().any(|e| e.id == "default") {
+/// Ensures a "global" environment exists in `config`. Adds one if missing.
+/// Migrates legacy "default" environment to "global" if found.
+pub fn ensure_global(config: &mut Config) {
+    // Migrate legacy "default" to "global"
+    if let Some(env) = config.environments.iter_mut().find(|e| e.id == "default") {
+        env.id = "global".to_string();
+        env.name = "Global".to_string();
+    }
+    // Ensure global exists
+    if !config.environments.iter().any(|e| e.id == "global") {
         config.environments.insert(
             0,
             Environment {
-                id: "default".to_string(),
-                name: "Default".to_string(),
+                id: "global".to_string(),
+                name: "Global".to_string(),
                 servers: Vec::new(),
             },
         );
@@ -114,21 +121,21 @@ pub fn ensure_default(config: &mut Config) {
 // Load / Save
 // ---------------------------------------------------------------------------
 
-/// Loads config from `path`, ensuring a default environment exists.
+/// Loads config from `path`, ensuring a global environment exists.
 pub fn load(path: &Path) -> Result<Config, ConfigError> {
     let content = std::fs::read_to_string(path)?;
     let mut config: Config = serde_json::from_str(&content)?;
-    ensure_default(&mut config);
+    ensure_global(&mut config);
     Ok(config)
 }
 
-/// Loads config from `path`, or returns a fresh config with an empty default
+/// Loads config from `path`, or returns a fresh config with an empty global
 /// environment if the file does not exist.
 pub fn load_or_default(path: &Path) -> Config {
     match std::fs::read_to_string(path) {
         Ok(content) => match serde_json::from_str::<Config>(&content) {
             Ok(mut config) => {
-                ensure_default(&mut config);
+                ensure_global(&mut config);
                 config
             }
             Err(_) => default_config(),
@@ -152,8 +159,8 @@ fn default_config() -> Config {
         port: default_port(),
         permissions: Permissions::default(),
         environments: vec![Environment {
-            id: "default".to_string(),
-            name: "Default".to_string(),
+            id: "global".to_string(),
+            name: "Global".to_string(),
             servers: Vec::new(),
         }],
     }
@@ -187,11 +194,11 @@ pub fn find_environment_mut<'a>(config: &'a mut Config, id: &str) -> Option<&'a 
 }
 
 /// Removes an environment by id.
-/// Returns `Err(CannotDeleteDefault)` if `id == "default"`.
+/// Returns `Err(CannotDeleteGlobal)` if `id == "global"`.
 /// Returns `Err(EnvironmentNotFound)` if the id does not exist.
 pub fn remove_environment(config: &mut Config, id: &str) -> Result<(), ConfigError> {
-    if id == "default" {
-        return Err(ConfigError::CannotDeleteDefault);
+    if id == "global" {
+        return Err(ConfigError::CannotDeleteGlobal);
     }
     let before = config.environments.len();
     config.environments.retain(|e| e.id != id);
@@ -239,8 +246,8 @@ mod tests {
             },
             "environments": [
                 {
-                    "id": "default",
-                    "name": "Default",
+                    "id": "global",
+                    "name": "Global",
                     "servers": ["filesystem", "github"]
                 }
             ]
@@ -271,7 +278,7 @@ mod tests {
 
         let mut cfg = default_config();
         cfg.port = 8080;
-        find_environment_mut(&mut cfg, "default")
+        find_environment_mut(&mut cfg, "global")
             .unwrap()
             .servers
             .push("my-server".to_string());
@@ -284,11 +291,11 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Default environment bootstrap (missing default gets auto-created)
+    // Global environment bootstrap (missing global gets auto-created)
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_ensure_default_creates_missing_default() {
+    fn test_ensure_global_creates_missing_global() {
         let json = r#"
         {
             "port": 4242,
@@ -308,36 +315,36 @@ mod tests {
 
         let cfg = load(&path).unwrap();
 
-        // default env should have been injected
-        let default_env = find_environment(&cfg, "default");
-        assert!(default_env.is_some(), "default environment should be auto-created");
-        assert_eq!(default_env.unwrap().name, "Default");
+        // global env should have been injected
+        let global_env = find_environment(&cfg, "global");
+        assert!(global_env.is_some(), "global environment should be auto-created");
+        assert_eq!(global_env.unwrap().name, "Global");
     }
 
     #[test]
-    fn test_load_or_default_creates_default_env_when_file_missing() {
+    fn test_load_or_default_creates_global_env_when_file_missing() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("nonexistent.json");
 
         let cfg = load_or_default(&path);
-        assert!(find_environment(&cfg, "default").is_some());
+        assert!(find_environment(&cfg, "global").is_some());
         assert_eq!(cfg.port, 4242);
     }
 
     // -----------------------------------------------------------------------
-    // delete_environment("default") returns error
+    // delete_environment("global") returns error
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_delete_default_environment_returns_error() {
+    fn test_delete_global_environment_returns_error() {
         let mut cfg = default_config();
-        let result = remove_environment(&mut cfg, "default");
+        let result = remove_environment(&mut cfg, "global");
         assert!(
-            matches!(result, Err(ConfigError::CannotDeleteDefault)),
-            "expected CannotDeleteDefault error"
+            matches!(result, Err(ConfigError::CannotDeleteGlobal)),
+            "expected CannotDeleteGlobal error"
         );
         // environment was not removed
-        assert!(find_environment(&cfg, "default").is_some());
+        assert!(find_environment(&cfg, "global").is_some());
     }
 
     // -----------------------------------------------------------------------

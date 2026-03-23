@@ -41,7 +41,7 @@ mod tests {
     use crate::config::{add_environment, load_or_default};
     use std::path::PathBuf;
 
-    /// Build a Config with a "default" env (empty) and a "work" env with two servers.
+    /// Build a Config with a "global" env (empty) and a "work" env with two servers.
     fn config_with_envs() -> Config {
         // load_or_default on a nonexistent path returns a fresh default config
         let mut cfg = load_or_default(&PathBuf::from("/nonexistent/plugmux_test_config.json"));
@@ -69,9 +69,9 @@ mod tests {
     }
 
     #[test]
-    fn test_get_server_ids_default_environment_works() {
+    fn test_get_server_ids_global_environment_works() {
         let cfg = config_with_envs();
-        let ids = get_server_ids(&cfg, "default").expect("default environment should exist");
+        let ids = get_server_ids(&cfg, "global").expect("global environment should exist");
         assert!(ids.is_empty());
     }
 
