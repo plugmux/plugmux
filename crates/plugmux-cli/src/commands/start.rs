@@ -50,13 +50,13 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
         for rs in &resolved {
             if let Some(server_config) = &rs.config {
                 // Only start if not already running (avoid duplicate starts across envs)
-                if !manager.is_healthy(&rs.id).await {
-                    if let Err(e) = manager.start_server(server_config.clone()).await {
-                        eprintln!(
-                            "  [warn] failed to start server '{}' for env '{}': {}",
-                            rs.id, env.id, e
-                        );
-                    }
+                if !manager.is_healthy(&rs.id).await
+                    && let Err(e) = manager.start_server(server_config.clone()).await
+                {
+                    eprintln!(
+                        "  [warn] failed to start server '{}' for env '{}': {}",
+                        rs.id, env.id, e
+                    );
                 }
             } else {
                 eprintln!(
@@ -80,17 +80,16 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("  Environments:");
         for env in &cfg.environments {
-            println!(
-                "    {} -> http://127.0.0.1:{port}/env/{}",
-                env.name, env.id
-            );
+            println!("    {} -> http://127.0.0.1:{port}/env/{}", env.name, env.id);
         }
     }
     println!();
 
     // 7. Start axum server
+    let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
+        .map_err(|e| format!("failed to open database: {e}"))?;
     let config = Arc::new(RwLock::new(cfg));
-    router::start_server(config, manager, port, None).await?;
+    router::start_server(config, manager, port, Some(db)).await?;
 
     Ok(())
 }

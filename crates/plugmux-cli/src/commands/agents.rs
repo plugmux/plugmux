@@ -1,6 +1,6 @@
 use clap::Subcommand;
 use plugmux_core::agents::{
-    AgentRegistry, AgentState, AgentStatus, detect_all, connect_agent, disconnect_agent,
+    AgentRegistry, AgentState, AgentStatus, connect_agent, detect_all, disconnect_agent,
     disconnect_and_restore,
 };
 use plugmux_core::config;
@@ -41,7 +41,7 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
                 println!("No agents detected.");
                 return Ok(());
             }
-            println!("{:<20} {:<15} {}", "AGENT", "STATUS", "CONFIG PATH");
+            println!("{:<20} {:<15} CONFIG PATH", "AGENT", "STATUS");
             println!("{}", "-".repeat(70));
             for agent in &agents {
                 let status = match agent.status {
@@ -61,12 +61,12 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
             if *all {
                 let agents = detect_all(&registry, &state);
                 for agent in agents.iter().filter(|a| a.installed) {
-                    if let Some(entry) = registry.get_agent(&agent.id) {
-                        if let Some(path) = registry.resolve_config_path(entry) {
-                            match connect_agent(&path, &entry.config_format, &entry.mcp_key, port) {
-                                Ok(_) => println!("Connected: {}", agent.name),
-                                Err(e) => println!("Failed {}: {}", agent.name, e),
-                            }
+                    if let Some(entry) = registry.get_agent(&agent.id)
+                        && let Some(path) = registry.resolve_config_path(entry)
+                    {
+                        match connect_agent(&path, &entry.config_format, &entry.mcp_key, port) {
+                            Ok(_) => println!("Connected: {}", agent.name),
+                            Err(e) => println!("Failed {}: {}", agent.name, e),
                         }
                     }
                 }

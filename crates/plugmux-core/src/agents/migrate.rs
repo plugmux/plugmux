@@ -52,8 +52,7 @@ pub fn disconnect_and_restore(
         ConfigFormat::Toml => restore_toml(config_path, mcp_key, &backup_mcp)?,
     }
 
-    std::fs::remove_file(&backup_path)
-        .map_err(|e| format!("Failed to delete backup file: {e}"))?;
+    std::fs::remove_file(&backup_path).map_err(|e| format!("Failed to delete backup file: {e}"))?;
 
     Ok(())
 }
@@ -78,11 +77,7 @@ pub fn get_backup_path(config_path: &Path) -> Option<PathBuf> {
 // JSON helpers
 // ---------------------------------------------------------------------------
 
-fn connect_json(
-    config_path: &Path,
-    mcp_key: &str,
-    port: u16,
-) -> Result<Option<PathBuf>, String> {
+fn connect_json(config_path: &Path, mcp_key: &str, port: u16) -> Result<Option<PathBuf>, String> {
     // Ensure parent directory exists
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)
@@ -91,14 +86,13 @@ fn connect_json(
 
     // Read or create empty config
     let content = if config_path.exists() {
-        std::fs::read_to_string(config_path)
-            .map_err(|e| format!("Failed to read config: {e}"))?
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?
     } else {
         "{}".to_string()
     };
 
-    let mut root: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config JSON: {e}"))?;
+    let mut root: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config JSON: {e}"))?;
 
     // Create backup on first connect
     let mut backup_created = None;
@@ -118,24 +112,23 @@ fn connect_json(
     }
 
     // Insert plugmux entry
-    let url = format!("http://localhost:{port}/env/default");
-    root[mcp_key]["plugmux"] = serde_json::json!({ "url": url });
+    let url = crate::config::global_url(port);
+    root[mcp_key]["plugmux"] = serde_json::json!({ "type": "http", "url": url });
 
     // Write back pretty-printed
     let output = serde_json::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(backup_created)
 }
 
 fn disconnect_json(config_path: &Path, mcp_key: &str) -> Result<(), String> {
-    let content = std::fs::read_to_string(config_path)
-        .map_err(|e| format!("Failed to read config: {e}"))?;
+    let content =
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?;
 
-    let mut root: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config JSON: {e}"))?;
+    let mut root: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config JSON: {e}"))?;
 
     if let Some(serde_json::Value::Object(map)) = root.get_mut(mcp_key) {
         map.remove("plugmux");
@@ -143,8 +136,7 @@ fn disconnect_json(config_path: &Path, mcp_key: &str) -> Result<(), String> {
 
     let output = serde_json::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(())
 }
@@ -154,11 +146,11 @@ fn restore_json(
     mcp_key: &str,
     backup_mcp: &serde_json::Value,
 ) -> Result<(), String> {
-    let content = std::fs::read_to_string(config_path)
-        .map_err(|e| format!("Failed to read config: {e}"))?;
+    let content =
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?;
 
-    let mut root: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse config JSON: {e}"))?;
+    let mut root: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse config JSON: {e}"))?;
 
     // Replace mcpServers with backup contents
     root[mcp_key] = backup_mcp.clone();
@@ -170,8 +162,7 @@ fn restore_json(
 
     let output = serde_json::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(())
 }
@@ -180,11 +171,7 @@ fn restore_json(
 // TOML helpers
 // ---------------------------------------------------------------------------
 
-fn connect_toml(
-    config_path: &Path,
-    mcp_key: &str,
-    port: u16,
-) -> Result<Option<PathBuf>, String> {
+fn connect_toml(config_path: &Path, mcp_key: &str, port: u16) -> Result<Option<PathBuf>, String> {
     // Ensure parent directory exists
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)
@@ -193,8 +180,7 @@ fn connect_toml(
 
     // Read or create empty config
     let content = if config_path.exists() {
-        std::fs::read_to_string(config_path)
-            .map_err(|e| format!("Failed to read config: {e}"))?
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?
     } else {
         String::new()
     };
@@ -206,7 +192,10 @@ fn connect_toml(
     // Create backup on first connect — serialize current mcp_servers table as JSON
     let mut backup_created = None;
     if get_backup_path(config_path).is_none() {
-        let current_mcp = root.get(mcp_key).cloned().unwrap_or(toml::Value::Table(toml::map::Map::new()));
+        let current_mcp = root
+            .get(mcp_key)
+            .cloned()
+            .unwrap_or(toml::Value::Table(toml::map::Map::new()));
         let json_value = toml_value_to_json(&current_mcp);
         let backup_path = make_backup_path(config_path);
         let backup_json = serde_json::to_string_pretty(&json_value)
@@ -221,11 +210,14 @@ fn connect_toml(
         .as_table_mut()
         .ok_or("Config root is not a TOML table")?;
     if !root_table.contains_key(mcp_key) {
-        root_table.insert(mcp_key.to_string(), toml::Value::Table(toml::map::Map::new()));
+        root_table.insert(
+            mcp_key.to_string(),
+            toml::Value::Table(toml::map::Map::new()),
+        );
     }
 
     // Insert plugmux entry
-    let url = format!("http://localhost:{port}/env/default");
+    let url = crate::config::global_url(port);
     let mut plugmux_table = toml::map::Map::new();
     plugmux_table.insert("url".to_string(), toml::Value::String(url));
 
@@ -236,15 +228,14 @@ fn connect_toml(
     // Write back
     let output = toml::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config TOML: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(backup_created)
 }
 
 fn disconnect_toml(config_path: &Path, mcp_key: &str) -> Result<(), String> {
-    let content = std::fs::read_to_string(config_path)
-        .map_err(|e| format!("Failed to read config: {e}"))?;
+    let content =
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?;
 
     let mut root: toml::Value = content
         .parse()
@@ -256,8 +247,7 @@ fn disconnect_toml(config_path: &Path, mcp_key: &str) -> Result<(), String> {
 
     let output = toml::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config TOML: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(())
 }
@@ -267,8 +257,8 @@ fn restore_toml(
     mcp_key: &str,
     backup_mcp: &serde_json::Value,
 ) -> Result<(), String> {
-    let content = std::fs::read_to_string(config_path)
-        .map_err(|e| format!("Failed to read config: {e}"))?;
+    let content =
+        std::fs::read_to_string(config_path).map_err(|e| format!("Failed to read config: {e}"))?;
 
     let mut root: toml::Value = content
         .parse()
@@ -290,8 +280,7 @@ fn restore_toml(
 
     let output = toml::to_string_pretty(&root)
         .map_err(|e| format!("Failed to serialize config TOML: {e}"))?;
-    std::fs::write(config_path, output)
-        .map_err(|e| format!("Failed to write config: {e}"))?;
+    std::fs::write(config_path, output).map_err(|e| format!("Failed to write config: {e}"))?;
 
     Ok(())
 }
@@ -367,16 +356,15 @@ mod tests {
     fn test_connect_json_adds_plugmux_and_creates_backup() {
         let tmp = TempDir::new().unwrap();
         let config = tmp.path().join("config.json");
-        std::fs::write(
-            &config,
-            r#"{"mcpServers": {"github": {"command": "gh"}}}"#,
-        )
-        .unwrap();
+        std::fs::write(&config, r#"{"mcpServers": {"github": {"command": "gh"}}}"#).unwrap();
 
         let result = connect_agent(&config, &ConfigFormat::Json, "mcpServers", 4242);
         assert!(result.is_ok());
         let backup = result.unwrap();
-        assert!(backup.is_some(), "backup should be created on first connect");
+        assert!(
+            backup.is_some(),
+            "backup should be created on first connect"
+        );
         assert!(backup.unwrap().exists(), "backup file should exist on disk");
 
         // Verify config contents
@@ -384,11 +372,11 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
         let mcp = content.get("mcpServers").unwrap().as_object().unwrap();
         assert!(mcp.contains_key("plugmux"), "plugmux should be present");
-        assert!(mcp.contains_key("github"), "existing MCP should be preserved");
-        assert_eq!(
-            mcp["plugmux"]["url"],
-            "http://localhost:4242/env/default"
+        assert!(
+            mcp.contains_key("github"),
+            "existing MCP should be preserved"
         );
+        assert_eq!(mcp["plugmux"]["url"], "http://localhost:4242/env/global");
     }
 
     // 2. connect_agent JSON — backup only created on first connect
@@ -396,11 +384,7 @@ mod tests {
     fn test_connect_json_backup_not_overwritten() {
         let tmp = TempDir::new().unwrap();
         let config = tmp.path().join("config.json");
-        std::fs::write(
-            &config,
-            r#"{"mcpServers": {"github": {"command": "gh"}}}"#,
-        )
-        .unwrap();
+        std::fs::write(&config, r#"{"mcpServers": {"github": {"command": "gh"}}}"#).unwrap();
 
         // First connect — creates backup
         let first = connect_agent(&config, &ConfigFormat::Json, "mcpServers", 4242).unwrap();
@@ -461,7 +445,7 @@ mod tests {
         let config = tmp.path().join("config.json");
         std::fs::write(
             &config,
-            r#"{"mcpServers": {"plugmux": {"url": "http://localhost:4242/env/default"}, "github": {"command": "gh"}}}"#,
+            r#"{"mcpServers": {"plugmux": {"type": "http", "url": "http://localhost:4242/env/global"}, "github": {"command": "gh"}}}"#,
         )
         .unwrap();
 
@@ -479,11 +463,7 @@ mod tests {
     fn test_disconnect_json_no_error_if_no_plugmux() {
         let tmp = TempDir::new().unwrap();
         let config = tmp.path().join("config.json");
-        std::fs::write(
-            &config,
-            r#"{"mcpServers": {"github": {"command": "gh"}}}"#,
-        )
-        .unwrap();
+        std::fs::write(&config, r#"{"mcpServers": {"github": {"command": "gh"}}}"#).unwrap();
 
         let result = disconnect_agent(&config, &ConfigFormat::Json, "mcpServers");
         assert!(result.is_ok());
@@ -533,7 +513,7 @@ mod tests {
         let config = tmp.path().join("config.json");
         std::fs::write(
             &config,
-            r#"{"mcpServers": {"plugmux": {"url": "http://localhost:4242/env/default"}}}"#,
+            r#"{"mcpServers": {"plugmux": {"type": "http", "url": "http://localhost:4242/env/global"}}}"#,
         )
         .unwrap();
 
@@ -567,34 +547,33 @@ mod tests {
     fn test_connect_toml_adds_plugmux() {
         let tmp = TempDir::new().unwrap();
         let config = tmp.path().join("config.toml");
-        std::fs::write(
-            &config,
-            "[mcp_servers.github]\ncommand = \"gh\"\n",
-        )
-        .unwrap();
+        std::fs::write(&config, "[mcp_servers.github]\ncommand = \"gh\"\n").unwrap();
 
         let result = connect_agent(&config, &ConfigFormat::Toml, "mcp_servers", 4242);
         assert!(result.is_ok());
         let backup = result.unwrap();
         assert!(backup.is_some(), "backup should be created");
 
-        let content: toml::Value = std::fs::read_to_string(&config)
-            .unwrap()
-            .parse()
-            .unwrap();
+        let content: toml::Value = std::fs::read_to_string(&config).unwrap().parse().unwrap();
         let mcp = content.get("mcp_servers").unwrap().as_table().unwrap();
         assert!(mcp.contains_key("plugmux"), "plugmux should be added");
-        assert!(mcp.contains_key("github"), "existing entry should be preserved");
+        assert!(
+            mcp.contains_key("github"),
+            "existing entry should be preserved"
+        );
         assert_eq!(
             mcp["plugmux"]["url"].as_str().unwrap(),
-            "http://localhost:4242/env/default"
+            "http://localhost:4242/env/global"
         );
 
         // Verify backup is JSON (not TOML)
         let backup_path = backup.unwrap();
         let backup_content = std::fs::read_to_string(&backup_path).unwrap();
         let backup_json: serde_json::Value = serde_json::from_str(&backup_content).unwrap();
-        assert!(backup_json.get("github").is_some(), "backup should contain original entries as JSON");
+        assert!(
+            backup_json.get("github").is_some(),
+            "backup should contain original entries as JSON"
+        );
     }
 
     // 11. disconnect_agent TOML — removes plugmux from mcp_servers
@@ -604,16 +583,13 @@ mod tests {
         let config = tmp.path().join("config.toml");
         std::fs::write(
             &config,
-            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/default\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n",
+            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/global\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n",
         )
         .unwrap();
 
         disconnect_agent(&config, &ConfigFormat::Toml, "mcp_servers").unwrap();
 
-        let content: toml::Value = std::fs::read_to_string(&config)
-            .unwrap()
-            .parse()
-            .unwrap();
+        let content: toml::Value = std::fs::read_to_string(&config).unwrap().parse().unwrap();
         let mcp = content.get("mcp_servers").unwrap().as_table().unwrap();
         assert!(!mcp.contains_key("plugmux"), "plugmux should be removed");
         assert!(mcp.contains_key("github"), "other entries should remain");

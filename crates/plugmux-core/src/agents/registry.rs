@@ -108,15 +108,15 @@ impl AgentRegistry {
         let mut path = raw.to_string();
 
         // Expand ~ to home directory
-        if path.starts_with("~/") || path == "~" {
-            if let Some(home) = dirs::home_dir() {
-                let home_str = home.to_string_lossy();
-                path = if path == "~" {
-                    home_str.to_string()
-                } else {
-                    format!("{}{}", home_str, &path[1..])
-                };
-            }
+        if (path.starts_with("~/") || path == "~")
+            && let Some(home) = dirs::home_dir()
+        {
+            let home_str = home.to_string_lossy();
+            path = if path == "~" {
+                home_str.to_string()
+            } else {
+                format!("{}{}", home_str, &path[1..])
+            };
         }
 
         // Expand Windows environment variables
@@ -148,8 +148,8 @@ mod tests {
                 "mcp_key": "mcpServers",
                 "tier": "auto",
                 "config_paths": {
-                    "macos": "~/.claude/settings.json",
-                    "linux": "~/.claude/settings.json",
+                    "macos": "~/.claude.json",
+                    "linux": "~/.claude.json",
                     "windows": "%USERPROFILE%\\.claude\\settings.json"
                 }
             },
@@ -234,7 +234,9 @@ mod tests {
     #[test]
     fn test_get_agent_returns_correct_entry() {
         let registry = make_registry();
-        let agent = registry.get_agent("claude-code").expect("claude-code should exist");
+        let agent = registry
+            .get_agent("claude-code")
+            .expect("claude-code should exist");
         assert_eq!(agent.id, "claude-code");
         assert_eq!(agent.name, "Claude Code");
         assert_eq!(agent.icon, Some("claudecode".to_string()));
@@ -261,9 +263,13 @@ mod tests {
             let path = path.expect("should resolve on macOS/Linux");
             let path_str = path.to_string_lossy();
             // Should NOT start with ~
-            assert!(!path_str.starts_with('~'), "tilde should be expanded: {}", path_str);
+            assert!(
+                !path_str.starts_with('~'),
+                "tilde should be expanded: {}",
+                path_str
+            );
             // Should end with the expected suffix
-            assert!(path_str.ends_with(".claude/settings.json"));
+            assert!(path_str.ends_with(".claude.json"));
             // Should start with home dir
             let home = dirs::home_dir().expect("home dir exists");
             assert!(path.starts_with(&home));
@@ -275,7 +281,10 @@ mod tests {
         let registry = make_registry();
         let agent = registry.get_agent("cherrystudio").unwrap();
         let path = registry.resolve_config_path(agent);
-        assert!(path.is_none(), "manual agents with null config_paths should return None");
+        assert!(
+            path.is_none(),
+            "manual agents with null config_paths should return None"
+        );
     }
 
     #[test]
@@ -289,7 +298,10 @@ mod tests {
     fn test_load_bundled_does_not_panic() {
         let registry = AgentRegistry::load_bundled();
         let agents = registry.list_agents();
-        assert!(!agents.is_empty(), "bundled agents.json should have entries");
+        assert!(
+            !agents.is_empty(),
+            "bundled agents.json should have entries"
+        );
 
         // Verify some known agents exist
         assert!(registry.get_agent("claude-code").is_some());

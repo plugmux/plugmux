@@ -1,12 +1,15 @@
 //! Prompt aggregation and routing for the proxy layer.
 
-use crate::proxy::PromptInfo;
 use super::tools::NS_SEP;
+use crate::proxy::PromptInfo;
 
 pub fn namespace_prompt(server_id: &str, prompt: &PromptInfo) -> PromptInfo {
     PromptInfo {
         name: format!("{server_id}{NS_SEP}{}", prompt.name),
-        description: prompt.description.as_ref().map(|d| format!("[{}] {}", server_id, d)),
+        description: prompt
+            .description
+            .as_ref()
+            .map(|d| format!("[{}] {}", server_id, d)),
         arguments: prompt.arguments.clone(),
     }
 }

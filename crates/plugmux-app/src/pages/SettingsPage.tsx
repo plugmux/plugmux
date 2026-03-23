@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { RefreshCw } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
 import { useEngine } from "@/hooks/useEngine";
 import { useConfig } from "@/hooks/useConfig";
 import { getPort, setPort } from "@/lib/commands";
@@ -15,6 +18,33 @@ import { CustomServersSection } from "@/components/settings/CustomServersSection
 export function SettingsPage() {
   const { status, toggle } = useEngine();
   const { config } = useConfig();
+
+  // Version
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setVersion);
+  }, []);
+
+  // Update check
+  const [updateStatus, setUpdateStatus] = useState<
+    "idle" | "checking" | "available" | "latest" | "error"
+  >("idle");
+  const [updateVersion, setUpdateVersion] = useState("");
+
+  async function checkForUpdate() {
+    setUpdateStatus("checking");
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateVersion(update.version);
+        setUpdateStatus("available");
+      } else {
+        setUpdateStatus("latest");
+      }
+    } catch {
+      setUpdateStatus("error");
+    }
+  }
 
   // Port
   const [port, setPortValue] = useState<number>(0);
@@ -43,9 +73,9 @@ export function SettingsPage() {
     setAutostart(checked);
   };
 
-  // Dark mode (persisted in localStorage)
-  const [dark, setDark] = useState(
-    () => document.documentElement.classList.contains("dark"),
+  // Dark mode
+  const [dark, setDark] = useState(() =>
+    document.documentElement.classList.contains("dark"),
   );
   const handleDarkToggle = (checked: boolean) => {
     setDark(checked);
@@ -60,7 +90,6 @@ export function SettingsPage() {
     }
   };
 
-  // Status badge variant
   const badgeVariant =
     status === "running"
       ? "default"
@@ -143,10 +172,41 @@ export function SettingsPage() {
       <Separator className="my-6" />
 
       {/* About */}
-      <section className="space-y-2">
+      <section className="space-y-3">
         <h2 className="text-lg font-semibold">About</h2>
-        <p className="text-sm text-muted-foreground">plugmux v0.1.0</p>
-        <p className="text-sm text-muted-foreground">MIT License</p>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">
+            plugmux v{version || "..."}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={checkForUpdate}
+            disabled={updateStatus === "checking"}
+          >
+            <RefreshCw
+              className={`mr-1 h-3 w-3 ${updateStatus === "checking" ? "animate-spin" : ""}`}
+            />
+            Check for updates
+          </Button>
+          {updateStatus === "available" && (
+            <Badge variant="default" className="text-xs">
+              v{updateVersion} available
+            </Badge>
+          )}
+          {updateStatus === "latest" && (
+            <span className="text-xs text-green-600 dark:text-green-400">
+              Up to date
+            </span>
+          )}
+          {updateStatus === "error" && (
+            <span className="text-xs text-muted-foreground">
+              Could not check for updates
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">MIT License</p>
       </section>
     </div>
   );

@@ -91,9 +91,7 @@ impl CatalogRegistry {
                 let matches_query = query_lower.is_empty()
                     || entry.name.to_lowercase().contains(&query_lower)
                     || entry.description.to_lowercase().contains(&query_lower);
-                let matches_category = category
-                    .map(|c| entry.category == c)
-                    .unwrap_or(true);
+                let matches_category = category.map(|c| entry.category == c).unwrap_or(true);
                 matches_query && matches_category
             })
             .collect()
@@ -336,7 +334,9 @@ mod tests {
     #[test]
     fn test_get_preset_by_id() {
         let registry = make_registry();
-        let preset = registry.get_preset("web-dev").expect("web-dev should exist");
+        let preset = registry
+            .get_preset("web-dev")
+            .expect("web-dev should exist");
         assert_eq!(preset.id, "web-dev");
         assert_eq!(preset.name, "Web Development");
         assert!(preset.servers.contains(&"figma".to_string()));
@@ -365,7 +365,10 @@ mod tests {
         );
         assert_eq!(config.url, None);
         assert_eq!(config.connectivity, Connectivity::Online);
-        assert_eq!(config.description, Some("Read and inspect Figma designs".to_string()));
+        assert_eq!(
+            config.description,
+            Some("Read and inspect Figma designs".to_string())
+        );
     }
 
     #[test]

@@ -8,10 +8,14 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{HeaderMap, StatusCode},
+    response::{
+        IntoResponse,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
+use futures::stream::Stream;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::{error, info};
@@ -20,16 +24,12 @@ use crate::config::Config;
 use crate::db::Db;
 use crate::manager::ServerManager;
 use crate::plugmux_layer::PlugmuxLayer;
-use crate::proxy::{ProxyError, PromptInfo, ResourceInfo, ToolInfo};
+use crate::proxy::{PromptInfo, ProxyError, ResourceInfo, ToolInfo};
 use crate::proxy_layer::ProxyLayer;
 
 use super::{agent_detect, logging};
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const GLOBAL_ENV: &str = "global";
+use crate::config::GLOBAL_ENV;
 
 // ---------------------------------------------------------------------------
 // Shared application state
@@ -57,7 +57,7 @@ pub fn build_router(
     let state = AppState { plugmux, proxy, db };
 
     Router::new()
-        .route("/env/{env_id}", post(handle_jsonrpc))
+        .route("/env/{env_id}", post(handle_jsonrpc).get(handle_sse))
         .route("/health", get(handle_health))
         .with_state(state)
 }
@@ -86,28 +86,43 @@ async fn handle_health() -> impl IntoResponse {
 }
 
 // ---------------------------------------------------------------------------
+// SSE endpoint (GET) — Streamable HTTP transport
+// ---------------------------------------------------------------------------
+
+/// MCP Streamable HTTP requires a GET endpoint that returns an SSE stream.
+/// This keeps the connection open for server-initiated messages (notifications,
+/// sampling, elicitation). For now it sends a keep-alive ping.
+async fn handle_sse(
+    Path(_env_id): Path<String>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let stream = futures::stream::unfold((), |()| async {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        Some((Ok(Event::default().comment("keep-alive")), ()))
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// ---------------------------------------------------------------------------
 // JSON-RPC handler
 // ---------------------------------------------------------------------------
 
 async fn handle_jsonrpc(
     State(state): State<AppState>,
     Path(env_id): Path<String>,
-    headers: axum::http::HeaderMap,
+    headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     let start = std::time::Instant::now();
     let id = body.get("id").cloned().unwrap_or(Value::Null);
-    let method = body
-        .get("method")
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
+    let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = body.get("params").cloned().unwrap_or(Value::Null);
 
-    let user_agent = headers.get("user-agent")
+    let user_agent = headers
+        .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .map(String::from);
-    let agent_id = user_agent.as_deref()
-        .and_then(agent_detect::detect_agent);
+    let agent_id = user_agent.as_deref().and_then(agent_detect::detect_agent);
 
     let result = dispatch(&state, &env_id, method, &params).await;
     let duration = start.elapsed();
@@ -118,57 +133,60 @@ async fn handle_jsonrpc(
             Ok(v) => Ok(v.clone()),
             Err(e) => Err(e.to_string()),
         };
-        logging::log_request(
-            db, &env_id, method, &params, &log_result,
-            duration, user_agent.as_deref(), agent_id.as_deref(),
-            "default-session",
-        );
+        logging::log_request(&logging::LogRequestParams {
+            db,
+            env_id: &env_id,
+            method,
+            params: &params,
+            result: &log_result,
+            duration,
+            user_agent: user_agent.as_deref(),
+            agent_id: agent_id.as_deref(),
+            session_id: "default-session",
+        });
     }
 
-    match result {
-        Ok(value) => (
-            StatusCode::OK,
-            Json(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": value,
-            })),
-        ),
-        Err(ProxyError::ApprovalRequired {
-            action_id,
-            message,
-        }) => (
-            StatusCode::OK,
-            Json(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": {
-                    "content": [{
-                        "type": "text",
-                        "text": serde_json::to_string(&json!({
-                            "status": "approval_required",
-                            "action_id": action_id,
-                            "message": message,
-                        })).unwrap(),
-                    }]
-                }
-            })),
-        ),
+    // Streamable HTTP requires Mcp-Session-Id header
+    let session_id = format!("plugmux-{env_id}");
+    let mut resp_headers = HeaderMap::new();
+    if let Ok(val) = session_id.parse() {
+        resp_headers.insert("mcp-session-id", val);
+    }
+
+    let body = match result {
+        Ok(value) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": value,
+        }),
+        Err(ProxyError::ApprovalRequired { action_id, message }) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "content": [{
+                    "type": "text",
+                    "text": serde_json::to_string(&json!({
+                        "status": "approval_required",
+                        "action_id": action_id,
+                        "message": message,
+                    })).unwrap(),
+                }]
+            }
+        }),
         Err(err) => {
             error!(method = %method, env = %env_id, error = %err, "JSON-RPC error");
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {
-                        "code": -32603,
-                        "message": err.to_string(),
-                    },
-                })),
-            )
+            json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32603,
+                    "message": err.to_string(),
+                },
+            })
         }
-    }
+    };
+
+    (StatusCode::OK, resp_headers, Json(body))
 }
 
 // ---------------------------------------------------------------------------
@@ -225,10 +243,7 @@ fn handle_initialize() -> Value {
 // Dispatch helpers
 // ---------------------------------------------------------------------------
 
-async fn dispatch_tools_list(
-    state: &AppState,
-    env_id: &str,
-) -> Result<Value, ProxyError> {
+async fn dispatch_tools_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
     let tools: Vec<ToolInfo> = if env_id == GLOBAL_ENV {
         state.plugmux.list_tools()
     } else {
@@ -264,9 +279,7 @@ async fn dispatch_tools_call(
     let name = params
         .get("name")
         .and_then(|n| n.as_str())
-        .ok_or_else(|| {
-            ProxyError::Transport("missing 'name' in tools/call params".to_string())
-        })?;
+        .ok_or_else(|| ProxyError::Transport("missing 'name' in tools/call params".to_string()))?;
 
     let args = params
         .get("arguments")
@@ -280,10 +293,7 @@ async fn dispatch_tools_call(
     }
 }
 
-async fn dispatch_resources_list(
-    state: &AppState,
-    env_id: &str,
-) -> Result<Value, ProxyError> {
+async fn dispatch_resources_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
     let resources: Vec<ResourceInfo> = if env_id == GLOBAL_ENV {
         state.plugmux.list_resources()
     } else {
@@ -315,12 +325,9 @@ async fn dispatch_resources_read(
     env_id: &str,
     params: &Value,
 ) -> Result<Value, ProxyError> {
-    let uri = params
-        .get("uri")
-        .and_then(|u| u.as_str())
-        .ok_or_else(|| {
-            ProxyError::Transport("missing 'uri' in resources/read params".to_string())
-        })?;
+    let uri = params.get("uri").and_then(|u| u.as_str()).ok_or_else(|| {
+        ProxyError::Transport("missing 'uri' in resources/read params".to_string())
+    })?;
 
     if env_id == GLOBAL_ENV {
         state.plugmux.read_resource(uri).await
@@ -329,10 +336,7 @@ async fn dispatch_resources_read(
     }
 }
 
-async fn dispatch_prompts_list(
-    state: &AppState,
-    env_id: &str,
-) -> Result<Value, ProxyError> {
+async fn dispatch_prompts_list(state: &AppState, env_id: &str) -> Result<Value, ProxyError> {
     if env_id == GLOBAL_ENV {
         // Plugmux layer does not expose prompts.
         Ok(json!({ "prompts": [] }))
@@ -383,9 +387,7 @@ async fn dispatch_prompts_get(
     let name = params
         .get("name")
         .and_then(|n| n.as_str())
-        .ok_or_else(|| {
-            ProxyError::Transport("missing 'name' in prompts/get params".to_string())
-        })?;
+        .ok_or_else(|| ProxyError::Transport("missing 'name' in prompts/get params".to_string()))?;
 
     let args = params
         .get("arguments")

@@ -15,13 +15,18 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn open(path: &Path) -> Result<Arc<Self>, redb::Error> {
-        let db = Database::create(path)?;
-        let write_txn = db.begin_write()?;
-        {
-            let _ = write_txn.open_table(logs::LOGS_TABLE);
+    pub fn open(path: &Path) -> Result<Arc<Self>, Box<redb::Error>> {
+        #[allow(clippy::result_large_err)]
+        fn inner(path: &Path) -> Result<Database, redb::Error> {
+            let db = Database::create(path)?;
+            let write_txn = db.begin_write()?;
+            {
+                let _ = write_txn.open_table(logs::LOGS_TABLE);
+            }
+            write_txn.commit()?;
+            Ok(db)
         }
-        write_txn.commit()?;
+        let db = inner(path).map_err(Box::new)?;
         Ok(Arc::new(Self { inner: db }))
     }
 

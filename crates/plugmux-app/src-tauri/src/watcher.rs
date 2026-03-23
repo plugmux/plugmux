@@ -22,13 +22,10 @@ pub fn start_config_watcher(
     let app_handle = app.clone();
     let engine_clone = engine.clone();
 
-    let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-        match res {
+    let mut watcher =
+        notify::recommended_watcher(move |res: Result<Event, notify::Error>| match res {
             Ok(event) => {
-                if !matches!(
-                    event.kind,
-                    EventKind::Modify(_) | EventKind::Create(_)
-                ) {
+                if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                     return;
                 }
 
@@ -64,9 +61,8 @@ pub fn start_config_watcher(
             Err(e) => {
                 error!(error = %e, "config watcher error");
             }
-        }
-    })
-    .map_err(|e| format!("failed to create file watcher: {e}"))?;
+        })
+        .map_err(|e| format!("failed to create file watcher: {e}"))?;
 
     // Watch the config directory (handles both config.json and custom_servers.json)
     let dir = config::config_dir();

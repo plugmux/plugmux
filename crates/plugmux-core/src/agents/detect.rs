@@ -2,9 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::{
-    AgentEntry, AgentRegistry, AgentSource, AgentState, AgentTier, ConfigFormat,
-};
+use super::{AgentEntry, AgentRegistry, AgentSource, AgentState, AgentTier, ConfigFormat};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -164,11 +162,12 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
             let config_path_buf = config_path.as_ref().map(std::path::PathBuf::from);
             let installed = config_path_buf.as_ref().is_some_and(|p| p.exists());
 
-            let status = match (&config_path_buf, &state_entry.config_format, &state_entry.mcp_key)
-            {
-                (Some(p), Some(fmt), Some(key)) if installed => {
-                    detect_agent_status(p, fmt, key)
-                }
+            let status = match (
+                &config_path_buf,
+                &state_entry.config_format,
+                &state_entry.mcp_key,
+            ) {
+                (Some(p), Some(fmt), Some(key)) if installed => detect_agent_status(p, fmt, key),
                 _ => AgentStatus::Gray,
             };
 
@@ -232,7 +231,7 @@ mod tests {
         let path = tmp.path().join("config.json");
         std::fs::write(
             &path,
-            r#"{"mcpServers": {"plugmux": {"url": "http://localhost:4242/env/default"}}}"#,
+            r#"{"mcpServers": {"plugmux": {"type": "http", "url": "http://localhost:4242/env/global"}}}"#,
         )
         .unwrap();
 
@@ -246,7 +245,7 @@ mod tests {
         let path = tmp.path().join("config.json");
         std::fs::write(
             &path,
-            r#"{"mcpServers": {"plugmux": {"url": "http://localhost:4242/env/default"}, "github": {"command": "gh"}}}"#,
+            r#"{"mcpServers": {"plugmux": {"type": "http", "url": "http://localhost:4242/env/global"}, "github": {"command": "gh"}}}"#,
         )
         .unwrap();
 
@@ -258,11 +257,7 @@ mod tests {
     fn test_json_no_plugmux_returns_gray() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.json");
-        std::fs::write(
-            &path,
-            r#"{"mcpServers": {"github": {"command": "gh"}}}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, r#"{"mcpServers": {"github": {"command": "gh"}}}"#).unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Json, "mcpServers");
         assert_eq!(status, AgentStatus::Gray);
@@ -274,7 +269,7 @@ mod tests {
         let path = tmp.path().join("config.toml");
         std::fs::write(
             &path,
-            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/default\"\n",
+            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/global\"\n",
         )
         .unwrap();
 
@@ -288,7 +283,7 @@ mod tests {
         let path = tmp.path().join("config.toml");
         std::fs::write(
             &path,
-            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/default\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n",
+            "[mcp_servers.plugmux]\nurl = \"http://localhost:4242/env/global\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n",
         )
         .unwrap();
 
@@ -300,11 +295,7 @@ mod tests {
     fn test_toml_no_plugmux_returns_gray() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
-        std::fs::write(
-            &path,
-            "[mcp_servers.github]\ncommand = \"gh\"\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "[mcp_servers.github]\ncommand = \"gh\"\n").unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Toml, "mcp_servers");
         assert_eq!(status, AgentStatus::Gray);
@@ -361,8 +352,14 @@ mod tests {
         let detected = detect_all(&registry, &state);
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
-        assert!(!ids.contains(&"agent-a"), "dismissed agent should be excluded");
-        assert!(ids.contains(&"agent-b"), "non-dismissed agent should be included");
+        assert!(
+            !ids.contains(&"agent-a"),
+            "dismissed agent should be excluded"
+        );
+        assert!(
+            ids.contains(&"agent-b"),
+            "non-dismissed agent should be included"
+        );
     }
 
     #[test]

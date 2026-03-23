@@ -108,7 +108,7 @@ export function EnvironmentPage({ envId, onNavigate }: EnvironmentPageProps) {
           ) : (
             <>
               <h1 className="text-2xl font-bold">{env.name}</h1>
-              {envId !== "default" && (
+              {envId !== "global" && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -204,7 +204,7 @@ export function EnvironmentPage({ envId, onNavigate }: EnvironmentPageProps) {
       )}
 
       {/* Delete environment */}
-      {envId !== "default" && (
+      {envId !== "global" && (
         <>
           <Separator className="my-6" />
           <Button

@@ -31,7 +31,8 @@ export function AddAgentDialog({
   const snippet = JSON.stringify(
     {
       plugmux: {
-        url: `http://localhost:${port}/env/default`,
+        type: "http",
+        url: `http://localhost:${port}/env/global`,
       },
     },
     null,

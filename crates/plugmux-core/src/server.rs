@@ -45,3 +45,14 @@ pub enum HealthStatus {
     Degraded { reason: String },
     Unavailable { reason: String },
 }
+
+impl HealthStatus {
+    /// Return a short string label for the health status.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HealthStatus::Healthy => "healthy",
+            HealthStatus::Degraded { .. } => "degraded",
+            HealthStatus::Unavailable { .. } => "unavailable",
+        }
+    }
+}

@@ -61,10 +61,9 @@ pub fn run(cmd: &ServerCommands) -> Result<(), Box<dyn std::error::Error>> {
                 config::save(&cfg_path, &cfg)?;
                 println!("Removed server '{server_id}' from environment '{env}'.");
             } else {
-                return Err(format!(
-                    "server '{server_id}' not found in environment '{env}'"
-                )
-                .into());
+                return Err(
+                    format!("server '{server_id}' not found in environment '{env}'").into(),
+                );
             }
         }
 

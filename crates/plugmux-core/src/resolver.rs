@@ -150,17 +150,11 @@ mod tests {
 
     /// Returns a `ServerResolver` with `figma` and `github` in the catalog and
     /// `my-db` in the custom store.
+    #[allow(dead_code)]
     fn make_resolver() -> ServerResolver {
         let catalog = make_catalog();
-
-        let custom_store = {
-            let mut store =
-                CustomServerStore::load_or_default(std::path::PathBuf::from("/tmp/test_custom.json"));
-            // The store may have leftover state from a previous test run on disk, so we
-            // reconstruct it purely in-memory by using a temp path that won't exist.
-            store
-        };
-
+        let custom_store =
+            CustomServerStore::load_or_default(std::path::PathBuf::from("/tmp/test_custom.json"));
         let custom = Arc::new(std::sync::RwLock::new(custom_store));
         ServerResolver::new(catalog, custom)
     }
@@ -321,7 +315,7 @@ mod tests {
 
         let path = {
             let dir = tempfile::tempdir().unwrap();
-            let p = dir.into_path().join("custom.json");
+            let p = dir.keep().join("custom.json");
             std::fs::write(&p, raw_json).unwrap();
             p
         };
@@ -335,6 +329,9 @@ mod tests {
         // Must come from catalog, not custom.
         assert_eq!(result.source, ServerSource::Catalog);
         let config = result.config.unwrap();
-        assert_eq!(config.name, "Figma", "catalog name should win over custom name");
+        assert_eq!(
+            config.name, "Figma",
+            "catalog name should win over custom name"
+        );
     }
 }

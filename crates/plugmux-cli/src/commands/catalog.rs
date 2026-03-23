@@ -30,7 +30,10 @@ pub fn run(cmd: &CatalogCommands) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("Catalog servers ({} available):", servers.len());
                 for s in servers {
-                    println!("  {} ({}) [{}] - {}", s.name, s.id, s.category, s.description);
+                    println!(
+                        "  {} ({}) [{}] - {}",
+                        s.name, s.id, s.category, s.description
+                    );
                 }
             }
 
@@ -58,7 +61,10 @@ pub fn run(cmd: &CatalogCommands) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("Search results for '{query}':");
                 for s in &results {
-                    println!("  {} ({}) [{}] - {}", s.name, s.id, s.category, s.description);
+                    println!(
+                        "  {} ({}) [{}] - {}",
+                        s.name, s.id, s.category, s.description
+                    );
                 }
             }
         }

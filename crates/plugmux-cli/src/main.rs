@@ -3,7 +3,11 @@ mod commands;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "plugmux", version, about = "MCP gateway -- one URL, all your servers")]
+#[command(
+    name = "plugmux",
+    version,
+    about = "MCP gateway -- one URL, all your servers"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

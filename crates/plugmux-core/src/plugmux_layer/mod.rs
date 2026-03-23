@@ -10,7 +10,7 @@ pub mod tools;
 
 use std::sync::Arc;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Config, PermissionLevel};
@@ -18,7 +18,6 @@ use crate::environment;
 use crate::manager::ServerManager;
 use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ResourceInfo, ToolInfo};
-use crate::server::HealthStatus;
 
 /// The plugmux management layer — served only on `/env/global`.
 pub struct PlugmuxLayer {
@@ -167,12 +166,7 @@ impl PlugmuxLayer {
             Err(_) => 0,
         };
 
-        let health_str = match &health {
-            Some(HealthStatus::Healthy) => "healthy",
-            Some(HealthStatus::Degraded { .. }) => "degraded",
-            Some(HealthStatus::Unavailable { .. }) => "unavailable",
-            None => "not_found",
-        };
+        let health_str = health.as_ref().map_or("not_found", |h| h.as_str());
 
         let status = json!({
             "server_id": server_id,
@@ -238,7 +232,7 @@ impl PlugmuxLayer {
             _ => {
                 return Err(ProxyError::ToolCallFailed(format!(
                     "Unknown action: {action}"
-                )))
+                )));
             }
         };
         match level {
@@ -261,9 +255,9 @@ impl PlugmuxLayer {
                     ),
                 })
             }
-            PermissionLevel::Disable => {
-                Err(ProxyError::ToolCallFailed("This action is not available".into()))
-            }
+            PermissionLevel::Disable => Err(ProxyError::ToolCallFailed(
+                "This action is not available".into(),
+            )),
         }
     }
 
@@ -279,11 +273,7 @@ impl PlugmuxLayer {
                 Ok(tools) => tools.len(),
                 Err(_) => 0,
             };
-            let health_str = match health {
-                HealthStatus::Healthy => "healthy",
-                HealthStatus::Degraded { .. } => "degraded",
-                HealthStatus::Unavailable { .. } => "unavailable",
-            };
+            let health_str = health.as_str();
             entries.push(json!({
                 "id": id,
                 "health": health_str,
@@ -329,9 +319,7 @@ fn require_str(args: &Value, field: &str) -> Result<String, ProxyError> {
     args.get(field)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            ProxyError::ToolCallFailed(format!("missing required argument: {field}"))
-        })
+        .ok_or_else(|| ProxyError::ToolCallFailed(format!("missing required argument: {field}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -607,10 +595,7 @@ mod tests {
 
         // Confirm
         let result = layer
-            .call_tool(
-                "plugmux__confirm_action",
-                json!({"action_id": action_id}),
-            )
+            .call_tool("plugmux__confirm_action", json!({"action_id": action_id}))
             .await;
         assert!(result.is_ok());
 
@@ -633,10 +618,12 @@ mod tests {
         let result = layer.read_resource("plugmux://servers").await;
         assert!(result.is_ok());
         let val = result.unwrap();
-        assert!(val["contents"][0]["uri"]
-            .as_str()
-            .unwrap()
-            .contains("servers"));
+        assert!(
+            val["contents"][0]["uri"]
+                .as_str()
+                .unwrap()
+                .contains("servers")
+        );
     }
 
     #[tokio::test]
