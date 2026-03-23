@@ -27,7 +27,6 @@ interface AgentTableProps {
   onConnect: (id: string) => void;
   onDisable: (agent: DetectedAgent) => void;
   onDelete: (agent: DetectedAgent) => void;
-  onConfigure?: (agent: DetectedAgent) => void;
 }
 
 function AgentRow({
@@ -35,22 +34,17 @@ function AgentRow({
   onConnect,
   onDisable,
   onDelete,
-  onConfigure,
 }: {
   agent: DetectedAgent;
   onConnect: (id: string) => void;
   onDisable: (agent: DetectedAgent) => void;
   onDelete: (agent: DetectedAgent) => void;
-  onConfigure?: (agent: DetectedAgent) => void;
 }) {
   const isConnected = agent.status === "green" || agent.status === "yellow";
   const isInstalled = agent.installed;
-  const isManualOnly = !isInstalled && !agent.config_path;
 
   return (
-    <div
-      className={`flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5 ${!isInstalled ? "opacity-50" : ""}`}
-    >
+    <div className="flex min-h-[52px] items-center gap-3 rounded-md border border-border px-3 py-2.5">
       <Tooltip>
         <TooltipTrigger asChild>
           <span
@@ -62,10 +56,12 @@ function AgentRow({
         </TooltipContent>
       </Tooltip>
 
-      <AgentIcon icon={agent.icon} name={agent.name} />
+      <span className={!isInstalled ? "opacity-40" : ""}>
+        <AgentIcon icon={agent.icon} name={agent.name} />
+      </span>
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{agent.name}</p>
+        <p className={`text-sm font-medium ${!isInstalled ? "opacity-40" : ""}`}>{agent.name}</p>
         {isInstalled && agent.config_path && (
           <p className="truncate text-xs text-muted-foreground">
             {agent.config_path}
@@ -73,7 +69,6 @@ function AgentRow({
         )}
       </div>
 
-      {/* Installed agents with config: show switch */}
       {isInstalled && (
         <Switch
           checked={isConnected}
@@ -88,19 +83,6 @@ function AgentRow({
         />
       )}
 
-      {/* Manual-only agents (no config path, like ChatGPT): show Configure button */}
-      {isManualOnly && onConfigure && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-xs"
-          onClick={() => onConfigure(agent)}
-        >
-          Configure
-        </Button>
-      )}
-
-      {/* Delete — only for custom agents */}
       {agent.source === "custom" && (
         <Button
           variant="ghost"
@@ -120,7 +102,6 @@ export function AgentTable({
   onConnect,
   onDisable,
   onDelete,
-  onConfigure,
 }: AgentTableProps) {
   const installed = agents.filter((a) => a.installed);
   const notInstalled = agents.filter((a) => !a.installed);
@@ -128,7 +109,6 @@ export function AgentTable({
   return (
     <TooltipProvider delayDuration={300}>
       <div className="space-y-6">
-        {/* Installed / configured agents */}
         {installed.length > 0 && (
           <div className="space-y-1">
             <p className="px-1 pb-1 text-xs font-medium uppercase text-muted-foreground">
@@ -141,13 +121,11 @@ export function AgentTable({
                 onConnect={onConnect}
                 onDisable={onDisable}
                 onDelete={onDelete}
-                onConfigure={onConfigure}
               />
             ))}
           </div>
         )}
 
-        {/* Not installed agents */}
         {notInstalled.length > 0 && (
           <div className="space-y-1">
             <p className="px-1 pb-1 text-xs font-medium uppercase text-muted-foreground">
@@ -160,7 +138,6 @@ export function AgentTable({
                 onConnect={onConnect}
                 onDisable={onDisable}
                 onDelete={onDelete}
-                onConfigure={onConfigure}
               />
             ))}
           </div>

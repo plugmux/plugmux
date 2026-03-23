@@ -1,57 +1,27 @@
 import { useState } from "react";
-import { Cable, ArrowRightIcon, Plus, RefreshCw } from "lucide-react";
-import { Banner } from "@/components/ui/banner";
+import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
-import { DisableDialog } from "@/components/agents/DisableDialog";
-import { SetupDialog } from "@/components/agents/SetupDialog";
 import { AddAgentDialog } from "@/components/agents/AddAgentDialog";
 import { useAgents } from "@/hooks/useAgents";
-import { hasAgentBackup, type DetectedAgent } from "@/lib/commands";
 
 export function AgentsPage() {
-  const { agents, loading, hasConnected, connect, disconnect, dismiss, reload } =
+  const { agents, loading, connect, disconnect, dismiss, reload } =
     useAgents();
 
-  // Setup & AddAgent dialogs
-  const [setupOpen, setSetupOpen] = useState(false);
   const [addAgentOpen, setAddAgentOpen] = useState(false);
-
-  // Disable dialog state
-  const [disableAgent, setDisableAgent] = useState<DetectedAgent | null>(null);
-  const [hasBackup, setHasBackup] = useState(false);
-
-  async function openDisableDialog(agent: DetectedAgent) {
-    const backup = await hasAgentBackup(agent.id);
-    setHasBackup(backup);
-    setDisableAgent(agent);
-  }
-
-  function closeDisableDialog() {
-    setDisableAgent(null);
-    setHasBackup(false);
-  }
-
-  async function handleDisable() {
-    if (!disableAgent) return;
-    await disconnect(disableAgent.id, false);
-    closeDisableDialog();
-  }
-
-  async function handleDisableAndRestore() {
-    if (!disableAgent) return;
-    await disconnect(disableAgent.id, true);
-    closeDisableDialog();
-  }
 
   function handleConnect(id: string) {
     connect(id);
   }
 
-  function handleDelete(agent: DetectedAgent) {
+  function handleDisable(agent: { id: string }) {
+    disconnect(agent.id, false);
+  }
+
+  function handleDelete(agent: { id: string; status: string }) {
     if (agent.status === "green" || agent.status === "yellow") {
-      // Agent is connected — open disable dialog first
-      openDisableDialog(agent);
+      disconnect(agent.id, false);
     } else {
       dismiss(agent.id);
     }
@@ -63,29 +33,6 @@ export function AgentsPage() {
 
   return (
     <div className="space-y-6 px-6 pt-4 pb-6">
-      {/* Onboarding banner */}
-      {!hasConnected && (
-        <Banner
-          show={true}
-          variant="premium"
-          title="Connect your code agents"
-          description="To start using plugmux, make plugmux MCP available to your agents."
-          showShade={true}
-          closable={false}
-          icon={<Cable />}
-          action={
-            <Button
-              onClick={() => setSetupOpen(true)}
-              variant="ghost"
-              className="inline-flex items-center gap-1 rounded-md bg-black/10 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20"
-            >
-              Setup
-              <ArrowRightIcon className="h-3 w-3" />
-            </Button>
-          }
-        />
-      )}
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -109,37 +56,15 @@ export function AgentsPage() {
         </Button>
       </div>
 
-      {/* Agent table — all registry agents */}
+      {/* Agent table */}
       <AgentTable
         agents={agents}
         onConnect={handleConnect}
-        onDisable={openDisableDialog}
-        onDelete={handleDelete}
-        onConfigure={() => {
-          // TODO: show manual configuration instructions
-        }}
-      />
-
-      {/* Disable dialog */}
-      <DisableDialog
-        agent={disableAgent}
-        open={disableAgent !== null}
-        onOpenChange={(open) => {
-          if (!open) closeDisableDialog();
-        }}
         onDisable={handleDisable}
-        onDisableAndRestore={handleDisableAndRestore}
-        hasBackup={hasBackup}
+        onDelete={handleDelete}
       />
 
-      {/* Setup dialog */}
-      <SetupDialog
-        open={setupOpen}
-        onOpenChange={setSetupOpen}
-        onComplete={reload}
-      />
-
-      {/* Add agent dialog */}
+      {/* Add custom agent dialog */}
       <AddAgentDialog
         open={addAgentOpen}
         onOpenChange={setAddAgentOpen}
