@@ -28,8 +28,8 @@ const statusColor: Record<DetectedAgent["status"], string> = {
 };
 
 const statusTooltip: Record<DetectedAgent["status"], string> = {
-  green: "Connected",
-  yellow: "Connected (manually configured)",
+  green: "Active",
+  yellow: "Configured",
   gray: "Not connected",
 };
 

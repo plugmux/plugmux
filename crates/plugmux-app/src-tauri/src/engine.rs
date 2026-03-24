@@ -9,7 +9,7 @@ use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config::{self, Config};
 use plugmux_core::custom_servers::CustomServerStore;
 use plugmux_core::db::Db;
-use plugmux_core::gateway::router;
+use plugmux_core::gateway::{OnRequest, RequestEvent, router};
 use plugmux_core::health::start_health_checker;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::migration;
@@ -45,6 +45,10 @@ pub struct Engine {
     pub port: Arc<RwLock<u16>>,
     pub db: Arc<RwLock<Option<Arc<Db>>>>,
     pub shutdown_tx: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
+    /// Agent IDs that have made at least one MCP call through the gateway.
+    pub active_agents: Arc<std::sync::RwLock<HashSet<String>>>,
+    /// Callback provided by the Tauri layer — set via `set_on_request`.
+    on_request: Arc<RwLock<Option<OnRequest>>>,
 }
 
 impl Engine {
@@ -82,7 +86,15 @@ impl Engine {
             port: Arc::new(RwLock::new(port)),
             db: Arc::new(RwLock::new(None)),
             shutdown_tx: Arc::new(RwLock::new(None)),
+            active_agents: Arc::new(std::sync::RwLock::new(HashSet::new())),
+            on_request: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Set the callback that the gateway will invoke on every request.
+    /// Call this before `start()` — typically from Tauri setup.
+    pub async fn set_on_request(&self, cb: OnRequest) {
+        *self.on_request.write().await = Some(cb);
     }
 
     /// Start the gateway: resolve server IDs from ALL environments, start unique
@@ -138,7 +150,8 @@ impl Engine {
         let db =
             Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
         *self.db.write().await = Some(db.clone());
-        let router = router::build_router(config, manager, Some(db));
+        let on_request = self.on_request.read().await.clone();
+        let router = router::build_router(config, manager, Some(db), on_request);
         tokio::spawn(async move {
             let server = axum::serve(listener, router);
             tokio::select! {

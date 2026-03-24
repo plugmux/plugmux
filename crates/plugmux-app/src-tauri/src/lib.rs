@@ -93,8 +93,48 @@ pub fn run() {
             let engine_for_watcher = engine.clone();
             let handle = app.handle().clone();
 
-            // Auto-start engine
+            // Wire gateway callback: track active agents + emit UI events
+            {
+                let active_agents = engine.active_agents.clone();
+                let handle_cb = handle.clone();
+                let cb: plugmux_core::gateway::OnRequest = Arc::new(move |event| {
+                    // Emit log event to frontend
+                    let _ = handle_cb.emit(
+                        events::LOG_ADDED,
+                        events::LogAddedPayload {
+                            agent_id: event.agent_id.clone(),
+                            method: event.method,
+                            env_id: event.env_id,
+                            duration_ms: event.duration_ms,
+                            error: event.error,
+                        },
+                    );
+
+                    // Track active agents
+                    if let Some(ref id) = event.agent_id {
+                        let is_new = {
+                            let mut set = active_agents.write().unwrap();
+                            set.insert(id.clone())
+                        };
+                        let _ = handle_cb.emit(
+                            events::AGENT_ACTIVITY,
+                            events::AgentActivityPayload {
+                                agent_id: id.clone(),
+                                is_new,
+                            },
+                        );
+                    }
+                });
+
+                let engine_for_cb = engine.clone();
+                tauri::async_runtime::spawn(async move {
+                    engine_for_cb.set_on_request(cb).await;
+                });
+            }
+
+            // Auto-start engine (slight delay to ensure callback is wired first)
             tauri::async_runtime::spawn(async move {
+                tokio::task::yield_now().await;
                 match engine.start().await {
                     Ok(()) => {
                         let _ = handle.emit(

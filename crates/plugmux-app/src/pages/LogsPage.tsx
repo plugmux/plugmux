@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Badge } from "@/components/ui/badge";
 import { StatusDot, type StatusVariant } from "@/components/ui/status-dot";
 import {
@@ -39,7 +40,7 @@ export function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  async function fetchLogs() {
+  const fetchLogs = useCallback(async () => {
     try {
       const entries = await invoke<LogEntry[]>("get_recent_logs", {
         limit: 100,
@@ -49,20 +50,24 @@ export function LogsPage() {
     } catch (e) {
       setError(String(e));
     }
-  }
+  }, []);
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    const unlisten = listen("log_added", () => {
+      fetchLogs();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [fetchLogs]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-hidden p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Logs</h1>
         <span className="text-xs text-muted-foreground">
-          Auto-refreshing every 5s
+          Live
         </span>
       </div>
 

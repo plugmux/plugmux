@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -7,9 +8,9 @@ use super::{AgentEntry, AgentRegistry, AgentSource, AgentState, AgentTier, Confi
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentStatus {
-    Green,  // plugmux is the only MCP entry
-    Yellow, // plugmux present + other MCPs also present
-    Gray,   // not connected (no plugmux key, or not installed)
+    Green,  // agent has made MCP calls through plugmux
+    Yellow, // plugmux present in config, but no calls yet
+    Gray,   // plugmux not found in agent config
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,11 +29,11 @@ pub struct DetectedAgent {
 
 /// Determines the plugmux connection status by inspecting an agent's config file.
 ///
-/// - If the file doesn't exist, returns Gray.
-/// - Parses the file according to `config_format` and looks for the `mcp_key` section.
-/// - If that section contains a "plugmux" key and nothing else -> Green.
-/// - If "plugmux" is present alongside other keys -> Yellow.
+/// - If the file doesn't exist or can't be parsed, returns Gray.
+/// - If the `mcp_key` section contains a "plugmux" key -> Yellow (configured, no calls yet).
 /// - Otherwise -> Gray.
+///
+/// Note: Green is set externally when the agent has made actual MCP calls.
 pub fn detect_agent_status(
     config_path: &Path,
     config_format: &ConfigFormat,
@@ -60,16 +61,8 @@ fn detect_status_json(content: &str, mcp_key: &str) -> AgentStatus {
         _ => return AgentStatus::Gray,
     };
 
-    if mcp_section.is_empty() {
-        return AgentStatus::Gray;
-    }
-
     if mcp_section.contains_key("plugmux") {
-        if mcp_section.len() == 1 {
-            AgentStatus::Green
-        } else {
-            AgentStatus::Yellow
-        }
+        AgentStatus::Yellow
     } else {
         AgentStatus::Gray
     }
@@ -86,16 +79,8 @@ fn detect_status_toml(content: &str, mcp_key: &str) -> AgentStatus {
         _ => return AgentStatus::Gray,
     };
 
-    if mcp_section.is_empty() {
-        return AgentStatus::Gray;
-    }
-
     if mcp_section.contains_key("plugmux") {
-        if mcp_section.len() == 1 {
-            AgentStatus::Green
-        } else {
-            AgentStatus::Yellow
-        }
+        AgentStatus::Yellow
     } else {
         AgentStatus::Gray
     }
@@ -140,7 +125,12 @@ pub fn detect_agent(entry: &AgentEntry, registry: &AgentRegistry) -> DetectedAge
 /// - All auto-tier agents from the registry are included.
 /// - Agents from state with registry/custom sources are also included.
 /// - Dismissed agents are excluded.
-pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedAgent> {
+/// - Agents whose ID appears in `active_agents` are promoted to Green.
+pub fn detect_all(
+    registry: &AgentRegistry,
+    state: &AgentState,
+    active_agents: &HashSet<String>,
+) -> Vec<DetectedAgent> {
     let mut seen = std::collections::HashSet::new();
     let mut results = Vec::new();
 
@@ -206,6 +196,13 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
         seen.insert(state_entry.id.clone());
     }
 
+    // Promote Yellow → Green for agents that have made actual MCP calls
+    for agent in &mut results {
+        if active_agents.contains(&agent.id) && agent.status == AgentStatus::Yellow {
+            agent.status = AgentStatus::Green;
+        }
+    }
+
     // Sort by registry order — agents in the registry come first in their defined order,
     // custom/unknown agents sort to the end.
     results.sort_by_key(|a| registry.position(&a.id).unwrap_or(usize::MAX));
@@ -238,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_plugmux_only_returns_green() {
+    fn test_json_plugmux_only_returns_yellow() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.json");
         std::fs::write(
@@ -248,7 +245,7 @@ mod tests {
         .unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Json, "mcpServers");
-        assert_eq!(status, AgentStatus::Green);
+        assert_eq!(status, AgentStatus::Yellow);
     }
 
     #[test]
@@ -276,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn test_toml_plugmux_only_returns_green() {
+    fn test_toml_plugmux_only_returns_yellow() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         std::fs::write(
@@ -286,7 +283,7 @@ mod tests {
         .unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Toml, "mcp_servers");
-        assert_eq!(status, AgentStatus::Green);
+        assert_eq!(status, AgentStatus::Yellow);
     }
 
     #[test]
@@ -361,7 +358,7 @@ mod tests {
         let mut state = AgentState::default();
         state.dismiss_agent("agent-a");
 
-        let detected = detect_all(&registry, &state);
+        let detected = detect_all(&registry, &state, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(
@@ -406,7 +403,7 @@ mod tests {
             mcp_key: Some("mcpServers".to_string()),
         });
 
-        let detected = detect_all(&registry, &state);
+        let detected = detect_all(&registry, &state, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(ids.contains(&"agent-a"));

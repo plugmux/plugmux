@@ -8,6 +8,7 @@ import {
   dismissAgent,
   type DetectedAgent,
 } from "@/lib/commands";
+import { useEvents } from "./useEvents";
 
 export function useAgents() {
   const [agents, setAgents] = useState<DetectedAgent[]>([]);
@@ -32,6 +33,14 @@ export function useAgents() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Reload when a new agent makes its first call
+  useEvents<{ agent_id: string; is_new: boolean }>(
+    "agent_activity",
+    (payload) => {
+      if (payload.is_new) reload();
+    },
+  );
 
   const connectedAgents = agents.filter(
     (a) => a.status === "green" || a.status === "yellow",

@@ -388,11 +388,18 @@ pub async fn get_agent_registry() -> Result<Vec<AgentEntry>, String> {
 }
 
 #[tauri::command]
-pub async fn detect_agents() -> Result<Vec<DetectedAgent>, String> {
+pub async fn detect_agents(
+    engine: State<'_, Arc<Engine>>,
+) -> Result<Vec<DetectedAgent>, String> {
     let registry = AgentRegistry::load_bundled();
     let config_dir = plugmux_core::config::config_dir();
     let state = AgentState::load(&config_dir);
-    Ok(plugmux_core::agents::detect_all(&registry, &state))
+    let active = engine
+        .active_agents
+        .read()
+        .map_err(|e| e.to_string())?
+        .clone();
+    Ok(plugmux_core::agents::detect_all(&registry, &state, &active))
 }
 
 #[tauri::command]
