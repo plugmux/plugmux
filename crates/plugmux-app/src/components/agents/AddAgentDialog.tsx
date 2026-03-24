@@ -19,12 +19,14 @@ export function AddAgentDialog({
   onAdded,
 }: AddAgentDialogProps) {
   const [name, setName] = useState("");
+  const [configPath, setConfigPath] = useState("");
   const [port, setPort] = useState(4242);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName("");
+      setConfigPath("");
       setCopied(false);
       getPort().then(setPort);
     }
