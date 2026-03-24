@@ -96,15 +96,15 @@ export function LogsPage() {
 
       {logs.length > 0 && (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow className="border-border/60 bg-muted/60 hover:bg-muted/60">
-                <TableHead className="w-4 pl-2 pr-0"></TableHead>
-                <TableHead className="w-[70px] pl-1.5 pr-1">Time</TableHead>
-                <TableHead className="w-[80px] px-1">Env</TableHead>
-                <TableHead className="px-2">Method</TableHead>
-                <TableHead className="px-2">Agent</TableHead>
-                <TableHead className="px-2 text-right">ms</TableHead>
+                <TableHead className="w-8 px-2"></TableHead>
+                <TableHead className="w-[85px] px-2">Time</TableHead>
+                <TableHead className="w-[80px] px-2">Env</TableHead>
+                <TableHead className="w-full px-2">Method</TableHead>
+                <TableHead className="w-[130px] px-2 pr-4">Agent</TableHead>
+                <TableHead className="w-[56px] pl-2 pr-3 text-right">ms</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -112,35 +112,35 @@ export function LogsPage() {
                 const { variant, label } = logStatus(log);
                 return (
                   <TableRow key={log.id} className="border-border/40">
-                    <TableCell className="w-4 pl-2 pr-0 text-center">
+                    <TableCell className="w-8 px-2 text-center">
                       <StatusDot status={variant} label={label} />
                     </TableCell>
-                    <TableCell className="w-[70px] whitespace-nowrap pl-1.5 pr-1 text-muted-foreground">
+                    <TableCell className="w-[85px] whitespace-nowrap px-2 text-muted-foreground">
                       {formatTime(log.timestamp)}
                     </TableCell>
-                    <TableCell className="w-[80px] px-1">
+                    <TableCell className="w-[80px] px-2">
                       <Badge variant="outline" className="max-w-[72px] truncate font-mono text-xs">
                         {log.env_id}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[180px] truncate px-2 font-mono">
+                    <TableCell className="truncate px-2 font-mono">
                       {log.method}
                     </TableCell>
-                    <TableCell className="max-w-[140px] px-2 text-muted-foreground">
+                    <TableCell className="w-[130px] truncate px-2 pr-4 text-muted-foreground">
                       {(() => {
                         const id = log.agent_info?.agent_id;
                         if (!id) return "—";
                         const agent = agentMap.get(id);
-                        if (!agent) return id;
+                        if (!agent) return <span className="truncate">{id}</span>;
                         return (
                           <span className="flex items-center gap-1.5 truncate">
-                            <AgentIcon icon={agent.icon} name={agent.name} className="h-3.5 w-3.5" />
+                            <AgentIcon icon={agent.icon} name={agent.name} className="h-4 w-4 shrink-0" />
                             <span className="truncate">{agent.name}</span>
                           </span>
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap px-2 text-right tabular-nums">
+                    <TableCell className="w-[56px] whitespace-nowrap pl-2 pr-3 text-right tabular-nums">
                       {log.duration_ms}
                     </TableCell>
                   </TableRow>
