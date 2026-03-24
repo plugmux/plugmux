@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Badge } from "@/components/ui/badge";
 import { StatusDot, type StatusVariant } from "@/components/ui/status-dot";
+import { AgentIcon } from "@/components/agents/AgentIcon";
+import { getAgentRegistry, type AgentEntry } from "@/lib/commands";
 import {
   Table,
   TableBody,
@@ -39,6 +41,19 @@ function logStatus(log: LogEntry): { variant: StatusVariant; label: string } {
 export function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [registry, setRegistry] = useState<AgentEntry[]>([]);
+
+  const agentMap = useMemo(() => {
+    const map = new Map<string, { name: string; icon: string | null }>();
+    for (const agent of registry) {
+      map.set(agent.id, { name: agent.name, icon: agent.icon });
+    }
+    return map;
+  }, [registry]);
+
+  useEffect(() => {
+    getAgentRegistry().then(setRegistry);
+  }, []);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -111,8 +126,19 @@ export function LogsPage() {
                     <TableCell className="max-w-[180px] truncate px-2 font-mono">
                       {log.method}
                     </TableCell>
-                    <TableCell className="max-w-[100px] truncate px-2 text-muted-foreground">
-                      {log.agent_info?.agent_id || "—"}
+                    <TableCell className="max-w-[140px] px-2 text-muted-foreground">
+                      {(() => {
+                        const id = log.agent_info?.agent_id;
+                        if (!id) return "—";
+                        const agent = agentMap.get(id);
+                        if (!agent) return id;
+                        return (
+                          <span className="flex items-center gap-1.5 truncate">
+                            <AgentIcon icon={agent.icon} name={agent.name} className="h-3.5 w-3.5" />
+                            <span className="truncate">{agent.name}</span>
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="whitespace-nowrap px-2 text-right tabular-nums">
                       {log.duration_ms}
