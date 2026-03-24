@@ -96,6 +96,7 @@ pub fn run() {
             // Wire gateway callback: track active agents + emit UI events
             {
                 let active_agents = engine.active_agents.clone();
+                let db_ref = engine.db.clone();
                 let handle_cb = handle.clone();
                 let cb: plugmux_core::gateway::OnRequest = Arc::new(move |event| {
                     // Emit log event to frontend
@@ -116,6 +117,16 @@ pub fn run() {
                             let mut set = active_agents.write().unwrap();
                             set.insert(id.clone())
                         };
+                        // Persist to DB
+                        if is_new {
+                            if let Ok(guard) = db_ref.try_read() {
+                                if let Some(ref db) = *guard {
+                                    if let Err(e) = plugmux_core::db::active_agents::mark_active(db, id) {
+                                        tracing::warn!(error = %e, "failed to persist active agent");
+                                    }
+                                }
+                            }
+                        }
                         let _ = handle_cb.emit(
                             events::AGENT_ACTIVITY,
                             events::AgentActivityPayload {

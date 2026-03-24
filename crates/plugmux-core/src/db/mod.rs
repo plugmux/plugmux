@@ -1,8 +1,8 @@
 //! Embedded database module (redb).
 //!
-//! Currently stores request/response logs.
-//! Future phases: config, catalog, agents, sync metadata.
+//! Stores request/response logs and active agent tracking.
 
+pub mod active_agents;
 pub mod logs;
 
 use std::path::Path;
@@ -22,6 +22,7 @@ impl Db {
             let write_txn = db.begin_write()?;
             {
                 let _ = write_txn.open_table(logs::LOGS_TABLE);
+                let _ = write_txn.open_table(active_agents::ACTIVE_AGENTS_TABLE);
             }
             write_txn.commit()?;
             Ok(db)

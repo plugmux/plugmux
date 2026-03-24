@@ -150,6 +150,16 @@ impl Engine {
         let db =
             Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
         *self.db.write().await = Some(db.clone());
+
+        // Restore active agents from DB
+        match plugmux_core::db::active_agents::load_active(&db) {
+            Ok(ids) => {
+                let mut set = self.active_agents.write().unwrap();
+                *set = ids;
+                info!(count = set.len(), "restored active agents from DB");
+            }
+            Err(e) => warn!(error = %e, "failed to load active agents from DB"),
+        }
         let on_request = self.on_request.read().await.clone();
         let router = router::build_router(config, manager, Some(db), on_request);
         tokio::spawn(async move {
