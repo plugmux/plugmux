@@ -15,6 +15,7 @@ use axum::{
     },
     routing::{get, post},
 };
+use tower_http::cors::{Any, CorsLayer};
 use futures::stream::Stream;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
@@ -76,9 +77,16 @@ pub fn build_router(
     let proxy = Arc::new(ProxyLayer::new(config, manager));
     let state = AppState { plugmux, proxy, db, on_request };
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .expose_headers(Any);
+
     Router::new()
         .route("/env/{env_id}", post(handle_jsonrpc).get(handle_sse))
         .route("/health", get(handle_health))
+        .layer(cors)
         .with_state(state)
 }
 
