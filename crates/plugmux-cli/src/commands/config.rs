@@ -2,6 +2,7 @@ use clap::Subcommand;
 
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
+use plugmux_core::db::Db;
 use plugmux_core::migration;
 
 #[derive(Subcommand)]
@@ -30,7 +31,9 @@ pub fn run(cmd: &ConfigCommands) -> Result<(), Box<dyn std::error::Error>> {
         ConfigCommands::Migrate => {
             if migration::needs_migration() {
                 let catalog = CatalogRegistry::load_bundled();
-                migration::migrate(&catalog)?;
+                let db = Db::open(&Db::default_path())
+                    .map_err(|e| format!("failed to open database: {e}"))?;
+                migration::migrate(&catalog, &db)?;
                 println!("Migration complete.");
                 println!("  Old config backed up to: plugmux.json.backup");
                 println!("  New config: {}", config::config_path().display());

@@ -3,7 +3,8 @@ use clap::Subcommand;
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
 use plugmux_core::custom_servers::CustomServerStore;
-use plugmux_core::environment;
+use plugmux_core::db::Db;
+use plugmux_core::db::environments as db_env;
 
 #[derive(Subcommand)]
 pub enum ServerCommands {
@@ -32,8 +33,7 @@ pub enum ServerCommands {
 }
 
 pub fn run(cmd: &ServerCommands) -> Result<(), Box<dyn std::error::Error>> {
-    let cfg_path = config::config_path();
-    let mut cfg = config::load_or_default(&cfg_path);
+    let db = Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
 
     match cmd {
         ServerCommands::Add { server_id, env } => {
@@ -50,26 +50,18 @@ pub fn run(cmd: &ServerCommands) -> Result<(), Box<dyn std::error::Error>> {
                 .into());
             }
 
-            environment::add_server(&mut cfg, env, server_id)?;
-            config::save(&cfg_path, &cfg)?;
+            db_env::add_server(&db, env, server_id)?;
             println!("Added server '{server_id}' to environment '{env}'.");
         }
 
         ServerCommands::Remove { server_id, env } => {
-            let removed = environment::remove_server(&mut cfg, env, server_id)?;
-            if removed {
-                config::save(&cfg_path, &cfg)?;
-                println!("Removed server '{server_id}' from environment '{env}'.");
-            } else {
-                return Err(
-                    format!("server '{server_id}' not found in environment '{env}'").into(),
-                );
-            }
+            db_env::remove_server(&db, env, server_id)?;
+            println!("Removed server '{server_id}' from environment '{env}'.");
         }
 
         ServerCommands::List { env } => {
-            let server_ids = environment::get_server_ids(&cfg, env)
-                .ok_or_else(|| format!("environment '{env}' not found"))?;
+            let server_ids = db_env::get_server_ids(&db, env)
+                .map_err(|e| format!("environment '{env}' not found: {e}"))?;
 
             if server_ids.is_empty() {
                 println!("No servers in environment '{env}'.");
