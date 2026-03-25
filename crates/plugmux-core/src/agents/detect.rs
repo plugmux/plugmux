@@ -1,9 +1,13 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AgentEntry, AgentRegistry, AgentSource, AgentState, AgentTier, ConfigFormat};
+use crate::db::Db;
+use crate::db::agents as db_agents;
+
+use super::{AgentEntry, AgentRegistry, AgentSource, AgentTier, ConfigFormat};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -119,16 +123,25 @@ pub fn detect_agent(entry: &AgentEntry, registry: &AgentRegistry) -> DetectedAge
     }
 }
 
-/// Scans all agents from the registry and state, returning a deduplicated list
+/// Helper: parse a config_format string ("json"/"toml") into a ConfigFormat enum.
+fn parse_config_format(s: &str) -> Option<ConfigFormat> {
+    match s.to_lowercase().as_str() {
+        "json" => Some(ConfigFormat::Json),
+        "toml" => Some(ConfigFormat::Toml),
+        _ => None,
+    }
+}
+
+/// Scans all agents from the registry and db, returning a deduplicated list
 /// of detected agents.
 ///
 /// - All auto-tier agents from the registry are included.
-/// - Agents from state with registry/custom sources are also included.
+/// - Agents from db with registry/custom sources are also included.
 /// - Dismissed agents are excluded.
 /// - Agents whose ID appears in `active_agents` are promoted to Green.
 pub fn detect_all(
     registry: &AgentRegistry,
-    state: &AgentState,
+    db: &Arc<Db>,
     active_agents: &HashSet<String>,
 ) -> Vec<DetectedAgent> {
     let mut seen = std::collections::HashSet::new();
@@ -136,19 +149,20 @@ pub fn detect_all(
 
     // Include all agents from registry (auto + manual)
     for entry in registry.list_agents() {
-        if state.is_dismissed(&entry.id) {
+        if db_agents::is_dismissed(db, &entry.id) {
             continue;
         }
         seen.insert(entry.id.clone());
         results.push(detect_agent(entry, registry));
     }
 
-    // Include agents from state (registry/custom sources) that aren't already covered
-    for state_entry in &state.agents {
+    // Include agents from db (registry/custom sources) that aren't already covered
+    let db_entries = db_agents::list_agents(db);
+    for state_entry in &db_entries {
         if seen.contains(&state_entry.id) {
             continue;
         }
-        if state.is_dismissed(&state_entry.id) {
+        if db_agents::is_dismissed(db, &state_entry.id) {
             continue;
         }
 
@@ -163,10 +177,10 @@ pub fn detect_all(
 
             let status = match (
                 &config_path_buf,
-                &state_entry.config_format,
+                state_entry.config_format.as_deref().and_then(parse_config_format),
                 &state_entry.mcp_key,
             ) {
-                (Some(p), Some(fmt), Some(key)) if installed => detect_agent_status(p, fmt, key),
+                (Some(p), Some(ref fmt), Some(key)) if installed => detect_agent_status(p, fmt, key),
                 _ => AgentStatus::Gray,
             };
 
@@ -355,10 +369,10 @@ mod tests {
         }"#;
 
         let registry = AgentRegistry::load(registry_json).unwrap();
-        let mut state = AgentState::default();
-        state.dismiss_agent("agent-a");
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db_agents::dismiss_agent(&db, "agent-a").unwrap();
 
-        let detected = detect_all(&registry, &state, &HashSet::new());
+        let detected = detect_all(&registry, &db, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(
@@ -393,18 +407,18 @@ mod tests {
         }"#;
 
         let registry = AgentRegistry::load(registry_json).unwrap();
-        let mut state = AgentState::default();
-        state.add_agent(super::super::AgentStateEntry {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db_agents::add_agent(&db, &crate::db::agents::AgentStateEntry {
             id: "custom-agent".to_string(),
             source: AgentSource::Custom,
             name: Some("My Custom Agent".to_string()),
             icon: None,
             config_path: Some("/tmp/nonexistent-custom.json".to_string()),
-            config_format: Some(ConfigFormat::Json),
+            config_format: Some("json".to_string()),
             mcp_key: Some("mcpServers".to_string()),
-        });
+        }).unwrap();
 
-        let detected = detect_all(&registry, &state, &HashSet::new());
+        let detected = detect_all(&registry, &db, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(ids.contains(&"agent-a"));

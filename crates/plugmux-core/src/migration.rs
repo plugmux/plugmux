@@ -1,8 +1,11 @@
 use std::fs;
+use std::sync::Arc;
 
 use crate::catalog::CatalogRegistry;
-use crate::config::{self, Config, ConfigError, Environment};
+use crate::config::{self, Config, ConfigError};
 use crate::custom_servers::CustomServersData;
+use crate::db::Db;
+use crate::db::environments as db_envs;
 use crate::server::ServerConfig;
 
 // ---------------------------------------------------------------------------
@@ -17,7 +20,7 @@ pub fn needs_migration() -> bool {
     old.exists() && !new.exists()
 }
 
-/// Migrates Phase-2 `plugmux.json` → Phase-3 `config.json` + `custom_servers.json`.
+/// Migrates Phase-2 `plugmux.json` → Phase-3 `config.json` + `custom_servers.json` + Db.
 ///
 /// Steps:
 /// 1. Parse old `plugmux.json` as a `serde_json::Value`.
@@ -26,9 +29,10 @@ pub fn needs_migration() -> bool {
 /// 4. For every server, try to match it to a catalog entry by `command` or `url`.
 ///    - Matched  → use the catalog ID (no custom server entry needed).
 ///    - Unmatched → add to `custom_servers.json` and use the old server ID.
-/// 5. Write `config.json` and `custom_servers.json`.
-/// 6. Rename `plugmux.json` → `plugmux.json.backup`.
-pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
+/// 5. Write environments + servers to Db.
+/// 6. Write `config.json` and `custom_servers.json`.
+/// 7. Rename `plugmux.json` → `plugmux.json.backup`.
+pub fn migrate(catalog: &CatalogRegistry, db: &Arc<Db>) -> Result<(), ConfigError> {
     let old_path = config::config_dir().join("plugmux.json");
     let config_path = config::config_path();
     let custom_path = config::config_dir().join("custom_servers.json");
@@ -36,16 +40,14 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
     let old_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&old_path)?)?;
 
     let mut custom_servers: Vec<ServerConfig> = Vec::new();
-    let mut environments: Vec<Environment> = Vec::new();
+
+    // Collect environment data as (id, name, server_ids) tuples
+    let mut env_data: Vec<(String, String, Vec<String>)> = Vec::new();
 
     // 1. main.servers → "default" environment
     let main_server_ids =
         process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
-    environments.push(Environment {
-        id: "default".to_string(),
-        name: "Default".to_string(),
-        servers: main_server_ids,
-    });
+    env_data.push(("default".to_string(), "Default".to_string(), main_server_ids));
 
     // 2. Each old environment → its own environment entry
     if let Some(envs) = old_json["environments"].as_array() {
@@ -53,23 +55,29 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
             let id = env["id"].as_str().unwrap_or("unnamed").to_string();
             let name = env["name"].as_str().unwrap_or(&id).to_string();
             let server_ids = process_servers(&env["servers"], catalog, &mut custom_servers);
-            environments.push(Environment {
-                id,
-                name,
-                servers: server_ids,
-            });
+            env_data.push((id, name, server_ids));
         }
     }
 
-    // 3. Write config.json
+    // 3. Write environments + servers to Db
+    for (id, name, server_ids) in &env_data {
+        // "global" already exists in schema init, so skip errors for it
+        let _ = db_envs::add_environment(db, id, name);
+        for sid in server_ids {
+            let _ = db_envs::add_server(db, id, sid);
+        }
+    }
+
+    // 4. Write config.json (no environments field now)
     let cfg = Config {
         port: 4242,
         permissions: Default::default(),
-        environments,
+        device_id: uuid::Uuid::new_v4().to_string(),
+        onboarding_shown: false,
     };
     config::save(&config_path, &cfg)?;
 
-    // 4. Write custom_servers.json
+    // 5. Write custom_servers.json
     let custom_data = CustomServersData {
         version: 1,
         servers: custom_servers,
@@ -77,7 +85,7 @@ pub fn migrate(catalog: &CatalogRegistry) -> Result<(), ConfigError> {
     let json = serde_json::to_string_pretty(&custom_data)?;
     fs::write(&custom_path, json)?;
 
-    // 5. Rename old file to backup
+    // 6. Rename old file to backup
     let backup_path = config::config_dir().join("plugmux.json.backup");
     fs::rename(&old_path, &backup_path)?;
 
@@ -217,7 +225,6 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let old_path = dir.path().join("plugmux.json");
         fs::write(&old_path, "{}").unwrap();
-        // new config.json does NOT exist
 
         let result = needs_migration_in(dir.path(), dir.path());
         assert!(
@@ -242,7 +249,6 @@ mod tests {
     #[test]
     fn test_needs_migration_false_when_old_does_not_exist() {
         let dir = TempDir::new().unwrap();
-        // neither file exists
 
         let result = needs_migration_in(dir.path(), dir.path());
         assert!(
@@ -252,7 +258,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // migrate: main.servers → default environment
+    // migrate: main.servers → default environment in Db
     // -----------------------------------------------------------------------
 
     #[test]
@@ -277,21 +283,18 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-
-        assert_eq!(cfg.environments.len(), 1);
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
+        let sids = db_envs::get_server_ids(&db, "default").unwrap();
         assert!(
-            default_env.servers.contains(&"my-custom".to_string()),
+            sids.contains(&"my-custom".to_string()),
             "default env should contain the main server id"
         );
     }
 
     // -----------------------------------------------------------------------
-    // migrate: environments → separate environment entries
+    // migrate: environments → separate environment entries in Db
     // -----------------------------------------------------------------------
 
     #[test]
@@ -321,20 +324,16 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
+        let envs = db_envs::list_environments(&db);
+        let env_ids: Vec<&str> = envs.iter().map(|e| e.id.as_str()).collect();
+        assert!(env_ids.contains(&"default"));
+        assert!(env_ids.contains(&"my-project"));
 
-        // Should have default + my-project
-        assert_eq!(cfg.environments.len(), 2);
-        let proj_env = cfg
-            .environments
-            .iter()
-            .find(|e| e.id == "my-project")
-            .unwrap();
-        assert_eq!(proj_env.name, "My Project");
-        assert!(proj_env.servers.contains(&"custom-api".to_string()));
+        let sids = db_envs::get_server_ids(&db, "my-project").unwrap();
+        assert!(sids.contains(&"custom-api".to_string()));
     }
 
     // -----------------------------------------------------------------------
@@ -344,7 +343,6 @@ mod tests {
     #[test]
     fn test_migrate_catalog_matched_server_uses_catalog_id() {
         let dir = TempDir::new().unwrap();
-        // "npx" matches the catalog "filesystem" entry
         let old_json = r#"{
             "main": {
                 "servers": [
@@ -364,18 +362,15 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
+        let sids = db_envs::get_server_ids(&db, "default").unwrap();
         assert!(
-            default_env.servers.contains(&"filesystem".to_string()),
+            sids.contains(&"filesystem".to_string()),
             "catalog-matched server should use catalog id 'filesystem'"
         );
 
-        // Nothing should end up in custom_servers.json
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
             serde_json::from_str(&fs::read_to_string(&custom_path).unwrap()).unwrap();
@@ -392,7 +387,6 @@ mod tests {
     #[test]
     fn test_migrate_catalog_matched_server_by_url_uses_catalog_id() {
         let dir = TempDir::new().unwrap();
-        // "https://mcp.context7.com/mcp" matches the catalog "context7" entry
         let old_json = r#"{
             "main": {
                 "servers": [
@@ -411,13 +405,11 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
-        assert!(default_env.servers.contains(&"context7".to_string()));
+        let sids = db_envs::get_server_ids(&db, "default").unwrap();
+        assert!(sids.contains(&"context7".to_string()));
 
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
@@ -453,7 +445,8 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
@@ -467,11 +460,9 @@ mod tests {
         assert_eq!(custom.servers[0].id, "my-internal-api");
         assert_eq!(custom.servers[0].name, "Internal API");
 
-        // The environment should reference the old id
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
-        assert!(default_env.servers.contains(&"my-internal-api".to_string()));
+        // The environment should reference the old id in db
+        let sids = db_envs::get_server_ids(&db, "default").unwrap();
+        assert!(sids.contains(&"my-internal-api".to_string()));
     }
 
     // -----------------------------------------------------------------------
@@ -485,7 +476,8 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
         assert!(
             !dir.path().join("plugmux.json").exists(),
@@ -538,21 +530,19 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
-        let work_env = cfg.environments.iter().find(|e| e.id == "work").unwrap();
+        let default_sids = db_envs::get_server_ids(&db, "default").unwrap();
+        let work_sids = db_envs::get_server_ids(&db, "work").unwrap();
 
         // default only has main-only
-        assert!(default_env.servers.contains(&"main-only".to_string()));
-        assert!(!default_env.servers.contains(&"work-only".to_string()));
+        assert!(default_sids.contains(&"main-only".to_string()));
+        assert!(!default_sids.contains(&"work-only".to_string()));
 
         // work only has work-only
-        assert!(work_env.servers.contains(&"work-only".to_string()));
-        assert!(!work_env.servers.contains(&"main-only".to_string()));
+        assert!(work_sids.contains(&"work-only".to_string()));
+        assert!(!work_sids.contains(&"main-only".to_string()));
     }
 
     // -----------------------------------------------------------------------
@@ -580,8 +570,8 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        // Must not error out due to `enabled` field
-        let result = migrate_in(dir.path(), &catalog);
+        let db = Db::open_in_memory().unwrap();
+        let result = migrate_in(dir.path(), &catalog, &db);
         assert!(
             result.is_ok(),
             "migration should succeed even with `enabled` field present"
@@ -590,7 +580,6 @@ mod tests {
         let custom_path = dir.path().join("custom_servers.json");
         let custom: CustomServersData =
             serde_json::from_str(&fs::read_to_string(&custom_path).unwrap()).unwrap();
-        // Verify the server was parsed and stored without `enabled`
         assert_eq!(custom.servers.len(), 1);
         assert_eq!(custom.servers[0].id, "my-server");
         let serialized = serde_json::to_string(&custom.servers[0]).unwrap();
@@ -607,7 +596,6 @@ mod tests {
     #[test]
     fn test_duplicate_server_ids_are_deduplicated() {
         let dir = TempDir::new().unwrap();
-        // Two servers with the same command ("npx") both match catalog "filesystem"
         let old_json = r#"{
             "main": {
                 "servers": [
@@ -634,18 +622,11 @@ mod tests {
         write_old_config(&dir, old_json);
 
         let catalog = make_catalog();
-        migrate_in(dir.path(), &catalog).unwrap();
+        let db = Db::open_in_memory().unwrap();
+        migrate_in(dir.path(), &catalog, &db).unwrap();
 
-        let cfg_path = dir.path().join("config.json");
-        let cfg: Config = serde_json::from_str(&fs::read_to_string(&cfg_path).unwrap()).unwrap();
-
-        let default_env = cfg.environments.iter().find(|e| e.id == "default").unwrap();
-        // Both match "filesystem" in the catalog — only one reference should appear
-        let fs_count = default_env
-            .servers
-            .iter()
-            .filter(|s| *s == "filesystem")
-            .count();
+        let sids = db_envs::get_server_ids(&db, "default").unwrap();
+        let fs_count = sids.iter().filter(|s| *s == "filesystem").count();
         assert_eq!(
             fs_count, 1,
             "deduplicated: filesystem should appear only once"
@@ -665,6 +646,7 @@ mod tests {
     fn migrate_in(
         base_dir: &std::path::Path,
         catalog: &CatalogRegistry,
+        db: &Arc<Db>,
     ) -> Result<(), ConfigError> {
         let old_path = base_dir.join("plugmux.json");
         let config_path = base_dir.join("config.json");
@@ -673,33 +655,36 @@ mod tests {
         let old_json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&old_path)?)?;
 
         let mut custom_servers: Vec<ServerConfig> = Vec::new();
-        let mut environments: Vec<Environment> = Vec::new();
+
+        // Collect environment data as (id, name, server_ids) tuples
+        let mut env_data: Vec<(String, String, Vec<String>)> = Vec::new();
 
         let main_server_ids =
             process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
-        environments.push(Environment {
-            id: "default".to_string(),
-            name: "Default".to_string(),
-            servers: main_server_ids,
-        });
+        env_data.push(("default".to_string(), "Default".to_string(), main_server_ids));
 
         if let Some(envs) = old_json["environments"].as_array() {
             for env in envs {
                 let id = env["id"].as_str().unwrap_or("unnamed").to_string();
                 let name = env["name"].as_str().unwrap_or(&id).to_string();
                 let server_ids = process_servers(&env["servers"], catalog, &mut custom_servers);
-                environments.push(Environment {
-                    id,
-                    name,
-                    servers: server_ids,
-                });
+                env_data.push((id, name, server_ids));
+            }
+        }
+
+        // Write environments + servers to Db
+        for (id, name, server_ids) in &env_data {
+            let _ = db_envs::add_environment(db, id, name);
+            for sid in server_ids {
+                let _ = db_envs::add_server(db, id, sid);
             }
         }
 
         let cfg = Config {
             port: 4242,
             permissions: Default::default(),
-            environments,
+            device_id: uuid::Uuid::new_v4().to_string(),
+            onboarding_shown: false,
         };
         config::save(&config_path, &cfg)?;
 

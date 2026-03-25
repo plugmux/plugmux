@@ -15,8 +15,9 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Config, PermissionLevel};
 use crate::db::Db;
-use crate::environment;
+use crate::db::environments as db_envs;
 use crate::manager::ServerManager;
+use crate::slug::slugify;
 use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ResourceInfo, ToolInfo};
 
@@ -126,12 +127,12 @@ impl PlugmuxLayer {
         self.check_permission(env_id, server_id, "enable_server")
             .await?;
 
-        let mut cfg = self.config.write().await;
-        environment::add_server(&mut cfg, env_id, server_id)
-            .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-
-        // Best-effort save.
-        let _ = crate::config::save(&crate::config::config_path(), &cfg);
+        if let Some(ref db) = self.db {
+            db_envs::add_server(db, env_id, server_id)
+                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+        } else {
+            return Err(ProxyError::ToolCallFailed("database not available".into()));
+        }
 
         Ok(wrap_content(&format!(
             "Server '{server_id}' enabled in environment '{env_id}'"
@@ -146,12 +147,12 @@ impl PlugmuxLayer {
         self.check_permission(env_id, server_id, "disable_server")
             .await?;
 
-        let mut cfg = self.config.write().await;
-        environment::remove_server(&mut cfg, env_id, server_id)
-            .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-
-        // Best-effort save.
-        let _ = crate::config::save(&crate::config::config_path(), &cfg);
+        if let Some(ref db) = self.db {
+            db_envs::remove_server(db, env_id, server_id)
+                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+        } else {
+            return Err(ProxyError::ToolCallFailed("database not available".into()));
+        }
 
         Ok(wrap_content(&format!(
             "Server '{server_id}' disabled in environment '{env_id}'"
@@ -163,16 +164,18 @@ impl PlugmuxLayer {
         name: &str,
         servers: &[String],
     ) -> Result<Value, ProxyError> {
-        let mut cfg = self.config.write().await;
-        let env = crate::config::add_environment(&mut cfg, name);
-        let env_id = env.id.clone();
-        for server_id in servers {
-            if !env.servers.contains(server_id) {
-                env.servers.push(server_id.clone());
-            }
-        }
+        let db = self.db.as_ref().ok_or_else(|| {
+            ProxyError::ToolCallFailed("database not available".into())
+        })?;
 
-        let _ = crate::config::save(&crate::config::config_path(), &cfg);
+        let env_id = slugify(name);
+        db_envs::add_environment(db, &env_id, name)
+            .map_err(|e| ProxyError::ToolCallFailed(e))?;
+
+        for server_id in servers {
+            db_envs::add_server(db, &env_id, server_id)
+                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+        }
 
         let msg = if servers.is_empty() {
             format!(
@@ -200,22 +203,22 @@ impl PlugmuxLayer {
         })?;
         drop(pending);
 
+        let db = self.db.as_ref().ok_or_else(|| {
+            ProxyError::ToolCallFailed("database not available".into())
+        })?;
+
         match action.action.as_str() {
             "enable_server" => {
-                let mut cfg = self.config.write().await;
-                environment::add_server(&mut cfg, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-                let _ = crate::config::save(&crate::config::config_path(), &cfg);
+                db_envs::add_server(db, &action.env_id, &action.server_id)
+                    .map_err(|e| ProxyError::ToolCallFailed(e))?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' enabled in environment '{}'",
                     action.server_id, action.env_id
                 )))
             }
             "disable_server" => {
-                let mut cfg = self.config.write().await;
-                environment::remove_server(&mut cfg, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-                let _ = crate::config::save(&crate::config::config_path(), &cfg);
+                db_envs::remove_server(db, &action.env_id, &action.server_id)
+                    .map_err(|e| ProxyError::ToolCallFailed(e))?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' disabled in environment '{}'",
                     action.server_id, action.env_id
@@ -297,19 +300,23 @@ impl PlugmuxLayer {
     }
 
     async fn build_environments_json(&self) -> Value {
-        let cfg = self.config.read().await;
-        let envs: Vec<Value> = cfg
-            .environments
-            .iter()
-            .map(|env| {
-                json!({
-                    "id": env.id,
-                    "name": env.name,
-                    "servers": env.servers,
+        if let Some(ref db) = self.db {
+            let env_rows = db_envs::list_environments(db);
+            let envs: Vec<Value> = env_rows
+                .iter()
+                .map(|env| {
+                    let servers = db_envs::get_server_ids(db, &env.id).unwrap_or_default();
+                    json!({
+                        "id": env.id,
+                        "name": env.name,
+                        "servers": servers,
+                    })
                 })
-            })
-            .collect();
-        json!(envs)
+                .collect();
+            json!(envs)
+        } else {
+            json!([])
+        }
     }
 
     fn build_agents_json(&self) -> Value {
@@ -391,7 +398,8 @@ fn require_str(args: &Value, field: &str) -> Result<String, ProxyError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, Environment, PermissionLevel, Permissions};
+    use crate::config::{Config, PermissionLevel, Permissions};
+    use crate::db::Db;
 
     fn config_with_permission(enable: PermissionLevel, disable: PermissionLevel) -> Config {
         Config {
@@ -400,19 +408,27 @@ mod tests {
                 enable_server: enable,
                 disable_server: disable,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec!["filesystem".to_string()],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         }
     }
 
     fn make_layer(config: Config) -> PlugmuxLayer {
+        let db = Db::open_in_memory().unwrap();
+        // Pre-populate global env with "filesystem" server for tests that expect it
+        db_envs::add_server(&db, "global", "filesystem").unwrap();
         PlugmuxLayer::new(
             Arc::new(RwLock::new(config)),
             Arc::new(ServerManager::new()),
-            None,
+            Some(db),
+        )
+    }
+
+    fn make_layer_with_db(config: Config, db: Arc<Db>) -> PlugmuxLayer {
+        PlugmuxLayer::new(
+            Arc::new(RwLock::new(config)),
+            Arc::new(ServerManager::new()),
+            Some(db),
         )
     }
 
@@ -472,11 +488,11 @@ mod tests {
         assert!(text.contains("Work"));
         assert!(text.contains("figma"));
 
-        // Verify it was added to config
-        let cfg = layer.config.read().await;
-        let env = crate::config::find_environment(&cfg, "work");
-        assert!(env.is_some());
-        assert_eq!(env.unwrap().servers, vec!["figma", "github"]);
+        // Verify it was added to db
+        let db = layer.db.as_ref().unwrap();
+        let servers = db_envs::get_server_ids(db, "work").unwrap();
+        assert!(servers.contains(&"figma".to_string()));
+        assert!(servers.contains(&"github".to_string()));
     }
 
     #[tokio::test]
@@ -532,13 +548,11 @@ mod tests {
                 enable_server: PermissionLevel::Allow,
                 disable_server: PermissionLevel::Allow,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec![],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        let layer = make_layer_with_db(config, db);
 
         let result = layer
             .call_tool(
@@ -548,9 +562,9 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // Verify server was added to config
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        // Verify server was added to db
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(ids.contains(&"new-srv".to_string()));
     }
 
@@ -562,13 +576,13 @@ mod tests {
                 enable_server: PermissionLevel::Allow,
                 disable_server: PermissionLevel::Allow,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec!["filesystem".to_string(), "github".to_string()],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        db_envs::add_server(&db, "global", "filesystem").unwrap();
+        db_envs::add_server(&db, "global", "github").unwrap();
+        let layer = make_layer_with_db(config, db);
 
         let result = layer
             .call_tool(
@@ -578,8 +592,8 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(!ids.contains(&"filesystem".to_string()));
         assert!(ids.contains(&"github".to_string()));
     }
@@ -644,13 +658,11 @@ mod tests {
                 enable_server: PermissionLevel::Approve,
                 disable_server: PermissionLevel::Approve,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec![],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        let layer = make_layer_with_db(config, db);
 
         // Trigger approval
         let err = layer
@@ -671,9 +683,9 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // Verify server was added
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        // Verify server was added to db
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(ids.contains(&"new-srv".to_string()));
     }
 

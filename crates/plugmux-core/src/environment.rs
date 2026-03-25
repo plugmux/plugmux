@@ -1,33 +1,24 @@
-use crate::config::{self, Config, ConfigError};
+use std::sync::Arc;
+
+use crate::db::Db;
+use crate::db::environments;
 
 /// Get the list of server IDs for an environment.
-/// Returns `None` if the environment does not exist.
-pub fn get_server_ids(config: &Config, env_id: &str) -> Option<Vec<String>> {
-    config::find_environment(config, env_id).map(|env| env.servers.clone())
+/// Returns `None` if the query fails (e.g. environment does not exist).
+pub fn get_server_ids(db: &Arc<Db>, env_id: &str) -> Option<Vec<String>> {
+    environments::get_server_ids(db, env_id).ok()
 }
 
-/// Add a server ID to an environment (if not already present).
-pub fn add_server(config: &mut Config, env_id: &str, server_id: &str) -> Result<(), ConfigError> {
-    let env = config::find_environment_mut(config, env_id)
-        .ok_or(ConfigError::EnvironmentNotFound(env_id.to_string()))?;
-    if !env.servers.contains(&server_id.to_string()) {
-        env.servers.push(server_id.to_string());
-    }
-    Ok(())
+/// Add a server ID to an environment (idempotent).
+pub fn add_server(db: &Arc<Db>, env_id: &str, server_id: &str) -> Result<(), String> {
+    environments::add_server(db, env_id, server_id)
 }
 
 /// Remove a server ID from an environment.
-/// Returns `Ok(true)` if the server was present and removed, `Ok(false)` if it was not found.
-pub fn remove_server(
-    config: &mut Config,
-    env_id: &str,
-    server_id: &str,
-) -> Result<bool, ConfigError> {
-    let env = config::find_environment_mut(config, env_id)
-        .ok_or(ConfigError::EnvironmentNotFound(env_id.to_string()))?;
-    let before = env.servers.len();
-    env.servers.retain(|s| s != server_id);
-    Ok(env.servers.len() < before)
+/// Returns `Ok(true)` on success.
+pub fn remove_server(db: &Arc<Db>, env_id: &str, server_id: &str) -> Result<bool, String> {
+    environments::remove_server(db, env_id, server_id)?;
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------
@@ -37,94 +28,43 @@ pub fn remove_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{add_environment, load_or_default};
-    use std::path::PathBuf;
-
-    /// Build a Config with a "global" env (empty) and a "work" env with two servers.
-    fn config_with_envs() -> Config {
-        // load_or_default on a nonexistent path returns a fresh default config
-        let mut cfg = load_or_default(&PathBuf::from("/nonexistent/plugmux_test_config.json"));
-        let env = add_environment(&mut cfg, "Work");
-        env.servers.push("filesystem".to_string());
-        env.servers.push("github".to_string());
-        cfg
-    }
-
-    // -----------------------------------------------------------------------
-    // get_server_ids
-    // -----------------------------------------------------------------------
+    use crate::db::Db;
 
     #[test]
     fn test_get_server_ids_returns_ids_for_environment() {
-        let cfg = config_with_envs();
-        let ids = get_server_ids(&cfg, "work").expect("work environment should exist");
-        assert_eq!(ids, vec!["filesystem", "github"]);
-    }
+        let db = Db::open_in_memory().unwrap();
+        environments::add_server(&db, "global", "filesystem").unwrap();
+        environments::add_server(&db, "global", "github").unwrap();
 
-    #[test]
-    fn test_get_server_ids_nonexistent_environment_returns_none() {
-        let cfg = config_with_envs();
-        assert!(get_server_ids(&cfg, "does-not-exist").is_none());
+        let ids = get_server_ids(&db, "global").expect("global should exist");
+        assert!(ids.contains(&"filesystem".to_string()));
+        assert!(ids.contains(&"github".to_string()));
     }
-
-    #[test]
-    fn test_get_server_ids_global_environment_works() {
-        let cfg = config_with_envs();
-        let ids = get_server_ids(&cfg, "global").expect("global environment should exist");
-        assert!(ids.is_empty());
-    }
-
-    // -----------------------------------------------------------------------
-    // add_server
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_add_server_adds_id_to_environment() {
-        let mut cfg = config_with_envs();
-        add_server(&mut cfg, "work", "postgres").unwrap();
-        let ids = get_server_ids(&cfg, "work").unwrap();
+        let db = Db::open_in_memory().unwrap();
+        add_server(&db, "global", "postgres").unwrap();
+        let ids = get_server_ids(&db, "global").unwrap();
         assert!(ids.contains(&"postgres".to_string()));
     }
 
     #[test]
-    fn test_add_server_does_not_duplicate_existing_id() {
-        let mut cfg = config_with_envs();
-        add_server(&mut cfg, "work", "filesystem").unwrap();
-        let ids = get_server_ids(&cfg, "work").unwrap();
+    fn test_add_server_idempotent() {
+        let db = Db::open_in_memory().unwrap();
+        add_server(&db, "global", "filesystem").unwrap();
+        add_server(&db, "global", "filesystem").unwrap();
+        let ids = get_server_ids(&db, "global").unwrap();
         assert_eq!(ids.iter().filter(|s| *s == "filesystem").count(), 1);
     }
 
     #[test]
-    fn test_add_server_to_nonexistent_environment_returns_error() {
-        let mut cfg = config_with_envs();
-        let result = add_server(&mut cfg, "nope", "postgres");
-        assert!(matches!(result, Err(ConfigError::EnvironmentNotFound(_))));
-    }
-
-    // -----------------------------------------------------------------------
-    // remove_server
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_remove_server_removes_id_and_returns_true() {
-        let mut cfg = config_with_envs();
-        let removed = remove_server(&mut cfg, "work", "github").unwrap();
+    fn test_remove_server_removes_id() {
+        let db = Db::open_in_memory().unwrap();
+        add_server(&db, "global", "github").unwrap();
+        let removed = remove_server(&db, "global", "github").unwrap();
         assert!(removed);
-        let ids = get_server_ids(&cfg, "work").unwrap();
+        let ids = get_server_ids(&db, "global").unwrap();
         assert!(!ids.contains(&"github".to_string()));
-    }
-
-    #[test]
-    fn test_remove_server_missing_id_returns_false() {
-        let mut cfg = config_with_envs();
-        let removed = remove_server(&mut cfg, "work", "nonexistent").unwrap();
-        assert!(!removed);
-    }
-
-    #[test]
-    fn test_remove_server_from_nonexistent_environment_returns_error() {
-        let mut cfg = config_with_envs();
-        let result = remove_server(&mut cfg, "nope", "filesystem");
-        assert!(matches!(result, Err(ConfigError::EnvironmentNotFound(_))));
     }
 }

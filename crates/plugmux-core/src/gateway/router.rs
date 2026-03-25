@@ -73,8 +73,8 @@ pub fn build_router(
     db: Option<Arc<Db>>,
     on_request: Option<OnRequest>,
 ) -> Router {
-    let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone()));
-    let proxy = Arc::new(ProxyLayer::new(config, manager));
+    let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone(), db.clone()));
+    let proxy = Arc::new(ProxyLayer::new(config, manager, db.clone()));
     let state = AppState { plugmux, proxy, db, on_request };
 
     let cors = CorsLayer::new()
