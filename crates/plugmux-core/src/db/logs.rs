@@ -108,3 +108,82 @@ pub fn read_recent_logs(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, Str
         .collect();
     Ok(entries)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Db;
+
+    fn make_entry(id: &str, timestamp: &str) -> LogEntry {
+        LogEntry {
+            id: id.to_string(),
+            timestamp: timestamp.to_string(),
+            env_id: "global".to_string(),
+            method: "tools/call".to_string(),
+            params_summary: Some(r#"{"tool":"test"}"#.to_string()),
+            result_summary: Some(r#"{"ok":true}"#.to_string()),
+            error: None,
+            duration_ms: 42,
+            agent_info: Some(AgentInfo {
+                user_agent: Some("test-agent/1.0".to_string()),
+                agent_id: Some("agent-abc".to_string()),
+                session_id: "session-123".to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn test_write_and_read_log() {
+        let db = Db::open_in_memory().unwrap();
+        let entry = make_entry("test-1", "2026-03-25T10:00:00Z");
+        write_log(&db, &entry).unwrap();
+
+        let logs = read_recent_logs(&db, 10).unwrap();
+        assert_eq!(logs.len(), 1);
+
+        let got = &logs[0];
+        assert_eq!(got.id, "test-1");
+        assert_eq!(got.timestamp, "2026-03-25T10:00:00Z");
+        assert_eq!(got.env_id, "global");
+        assert_eq!(got.method, "tools/call");
+        assert_eq!(got.params_summary.as_deref(), Some(r#"{"tool":"test"}"#));
+        assert_eq!(got.result_summary.as_deref(), Some(r#"{"ok":true}"#));
+        assert_eq!(got.error, None);
+        assert_eq!(got.duration_ms, 42);
+
+        let info = got.agent_info.as_ref().unwrap();
+        assert_eq!(info.user_agent.as_deref(), Some("test-agent/1.0"));
+        assert_eq!(info.agent_id.as_deref(), Some("agent-abc"));
+        assert_eq!(info.session_id, "session-123");
+    }
+
+    #[test]
+    fn test_recent_logs_limit() {
+        let db = Db::open_in_memory().unwrap();
+
+        for i in 1..=5 {
+            let ts = format!("2026-03-25T10:00:0{}Z", i);
+            let id = format!("test-{}", i);
+            write_log(&db, &make_entry(&id, &ts)).unwrap();
+        }
+
+        let logs = read_recent_logs(&db, 3).unwrap();
+        assert_eq!(logs.len(), 3);
+    }
+
+    #[test]
+    fn test_summarize_value_truncates() {
+        // Build a JSON string value longer than 2048 chars.
+        let big_string = "x".repeat(6000);
+        let value = serde_json::json!({ "data": big_string });
+
+        let summary = LogEntry::summarize_value(&value).unwrap();
+        // Must be truncated and end with "..."
+        assert!(summary.ends_with("..."), "expected summary to end with '...'");
+        // The raw serialised form is >2048, so the summary must be shorter.
+        let raw = serde_json::to_string(&value).unwrap();
+        assert!(summary.len() < raw.len());
+        // The non-truncated prefix plus "..." should be at most 2048 + 3 chars.
+        assert!(summary.len() <= 2048 + 3);
+    }
+}
