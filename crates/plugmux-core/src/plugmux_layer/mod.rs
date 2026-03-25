@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Config, PermissionLevel};
+use crate::db::Db;
 use crate::environment;
 use crate::manager::ServerManager;
 use crate::pending_actions::PendingActions;
@@ -24,15 +25,17 @@ pub struct PlugmuxLayer {
     pub config: Arc<RwLock<Config>>,
     pub manager: Arc<ServerManager>,
     pub pending: Mutex<PendingActions>,
+    pub db: Option<Arc<Db>>,
 }
 
 impl PlugmuxLayer {
     /// Create a new `PlugmuxLayer`.
-    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>) -> Self {
+    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>, db: Option<Arc<Db>>) -> Self {
         Self {
             config,
             manager,
             pending: Mutex::new(PendingActions::new()),
+            db,
         }
     }
 
@@ -98,12 +101,12 @@ impl PlugmuxLayer {
                 Ok(wrap_resource(uri, &envs.to_string()))
             }
             "plugmux://agents" => {
-                // TODO: wire agent state
-                Ok(wrap_resource(uri, "[]"))
+                let agents = self.build_agents_json();
+                Ok(wrap_resource(uri, &agents.to_string()))
             }
             "plugmux://logs/recent" => {
-                // TODO: wire DB logs
-                Ok(wrap_resource(uri, "[]"))
+                let logs = self.build_logs_json();
+                Ok(wrap_resource(uri, &logs.to_string()))
             }
             _ => Err(ProxyError::Transport(format!(
                 "unknown plugmux resource: {uri}"
@@ -308,6 +311,55 @@ impl PlugmuxLayer {
             .collect();
         json!(envs)
     }
+
+    fn build_agents_json(&self) -> Value {
+        let registry = crate::agents::AgentRegistry::load_bundled();
+        let entries: Vec<Value> = registry
+            .list_agents()
+            .iter()
+            .map(|a| {
+                json!({
+                    "id": a.id,
+                    "name": a.name,
+                    "tier": a.tier,
+                })
+            })
+            .collect();
+        json!(entries)
+    }
+
+    fn build_logs_json(&self) -> Value {
+        if let Some(ref db) = self.db {
+            match crate::db::logs::read_recent_logs(db, 20) {
+                Ok(entries) => {
+                    let simplified: Vec<Value> = entries
+                        .iter()
+                        .map(|e| {
+                            let mut obj = json!({
+                                "method": e.method,
+                                "env_id": e.env_id,
+                                "duration_ms": e.duration_ms,
+                                "timestamp": e.timestamp,
+                            });
+                            if let Some(ref err) = e.error {
+                                obj["error"] = json!(err);
+                            }
+                            if let Some(ref info) = e.agent_info {
+                                if let Some(ref agent_id) = info.agent_id {
+                                    obj["agent"] = json!(agent_id);
+                                }
+                            }
+                            obj
+                        })
+                        .collect();
+                    json!(simplified)
+                }
+                Err(_) => json!([]),
+            }
+        } else {
+            json!([])
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -321,7 +373,7 @@ fn wrap_content(text: &str) -> Value {
 
 /// Wrap resource output in the MCP ReadResourceResult format.
 fn wrap_resource(uri: &str, text: &str) -> Value {
-    json!({"contents": [{"uri": uri, "text": text}]})
+    json!({"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]})
 }
 
 /// Extract a required string field from tool arguments.
@@ -360,6 +412,7 @@ mod tests {
         PlugmuxLayer::new(
             Arc::new(RwLock::new(config)),
             Arc::new(ServerManager::new()),
+            None,
         )
     }
 
@@ -659,7 +712,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_read_resource_agents_returns_empty() {
+    async fn test_read_resource_agents() {
         let layer = make_layer(config_with_permission(
             PermissionLevel::Allow,
             PermissionLevel::Allow,
@@ -667,7 +720,7 @@ mod tests {
         let result = layer.read_resource("plugmux://agents").await;
         assert!(result.is_ok());
         let val = result.unwrap();
-        assert_eq!(val["contents"][0]["text"].as_str().unwrap(), "[]");
+        assert!(val["contents"][0]["text"].as_str().is_some());
     }
 
     #[tokio::test]
