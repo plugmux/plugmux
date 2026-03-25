@@ -7,7 +7,6 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Config {
   port: number;
   permissions: Permissions;
-  environments: Environment[];
 }
 
 export interface Permissions {
