@@ -19,6 +19,8 @@ pub struct AgentStateEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_format: Option<ConfigFormat>,
@@ -95,6 +97,7 @@ mod tests {
             id: id.to_string(),
             source,
             name: None,
+            icon: None,
             config_path: None,
             config_format: None,
             mcp_key: None,
@@ -117,6 +120,7 @@ mod tests {
             id: "claude-code".to_string(),
             source: AgentSource::Auto,
             name: None,
+            icon: None,
             config_path: Some("/home/user/.claude.json".to_string()),
             config_format: Some(ConfigFormat::Json),
             mcp_key: Some("mcpServers".to_string()),

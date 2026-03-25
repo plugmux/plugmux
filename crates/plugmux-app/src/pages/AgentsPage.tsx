@@ -68,7 +68,6 @@ export function AgentsPage() {
       <AddAgentDialog
         open={addAgentOpen}
         onOpenChange={setAddAgentOpen}
-        onAdded={reload}
       />
 
       <InstallDialog

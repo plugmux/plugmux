@@ -6,6 +6,13 @@ import { StatusDot, type StatusVariant } from "@/components/ui/status-dot";
 import { AgentIcon } from "@/components/agents/AgentIcon";
 import { getAgentRegistry, type AgentEntry } from "@/lib/commands";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,9 +58,30 @@ export function LogsPage() {
     return map;
   }, [registry]);
 
+  const [filterAgent, setFilterAgent] = useState<string>("all");
+  const [filterEnv, setFilterEnv] = useState<string>("all");
+
   useEffect(() => {
     getAgentRegistry().then(setRegistry);
   }, []);
+
+  // Unique values for filter dropdowns
+  const envIds = useMemo(
+    () => [...new Set(logs.map((l) => l.env_id))].sort(),
+    [logs],
+  );
+  const agentIds = useMemo(
+    () => [...new Set(logs.map((l) => l.agent_info?.agent_id).filter(Boolean) as string[])].sort(),
+    [logs],
+  );
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (filterAgent !== "all" && log.agent_info?.agent_id !== filterAgent) return false;
+      if (filterEnv !== "all" && log.env_id !== filterEnv) return false;
+      return true;
+    });
+  }, [logs, filterAgent, filterEnv]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -81,20 +109,45 @@ export function LogsPage() {
     <div className="flex flex-1 flex-col gap-4 overflow-hidden p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Logs</h1>
-        <span className="text-xs text-muted-foreground">
-          Live
-        </span>
+        <div className="flex items-center gap-2">
+          <Select value={filterEnv} onValueChange={setFilterEnv}>
+            <SelectTrigger className="h-7 w-[110px] text-xs">
+              <SelectValue placeholder="Env" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All envs</SelectItem>
+              {envIds.map((id) => (
+                <SelectItem key={id} value={id}>{id}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterAgent} onValueChange={setFilterAgent}>
+            <SelectTrigger className="h-7 w-[130px] text-xs">
+              <SelectValue placeholder="Agent" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All agents</SelectItem>
+              {agentIds.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {agentMap.get(id)?.name ?? id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {logs.length === 0 && !error && (
+      {filteredLogs.length === 0 && !error && (
         <p className="text-sm text-muted-foreground">
-          No logs yet. Logs appear when agents send requests to plugmux.
+          {logs.length === 0
+            ? "No logs yet. Logs appear when agents send requests to plugmux."
+            : "No logs match the current filters."}
         </p>
       )}
 
-      {logs.length > 0 && (
+      {filteredLogs.length > 0 && (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60">
           <Table className="table-fixed">
             <TableHeader>
@@ -108,7 +161,7 @@ export function LogsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.map((log) => {
+              {filteredLogs.map((log) => {
                 const { variant, label } = logStatus(log);
                 return (
                   <TableRow key={log.id} className="border-border/40">

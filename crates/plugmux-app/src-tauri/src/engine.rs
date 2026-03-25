@@ -9,7 +9,7 @@ use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config::{self, Config};
 use plugmux_core::custom_servers::CustomServerStore;
 use plugmux_core::db::Db;
-use plugmux_core::gateway::{OnRequest, RequestEvent, router};
+use plugmux_core::gateway::{OnRequest, router};
 use plugmux_core::health::start_health_checker;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::migration;

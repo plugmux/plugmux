@@ -398,6 +398,7 @@ mod tests {
             id: "custom-agent".to_string(),
             source: AgentSource::Custom,
             name: Some("My Custom Agent".to_string()),
+            icon: None,
             config_path: Some("/tmp/nonexistent-custom.json".to_string()),
             config_format: Some(ConfigFormat::Json),
             mcp_key: Some("mcpServers".to_string()),
