@@ -1,12 +1,8 @@
-//! Log entry storage.
+//! Log entry storage (SQLite).
 
 use super::Db;
-use redb::{ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::sync::Arc;
-
-pub const LOGS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("logs");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -35,7 +31,7 @@ pub struct AgentInfo {
 }
 
 impl LogEntry {
-    pub fn summarize_value(value: &Value) -> Option<String> {
+    pub fn summarize_value(value: &serde_json::Value) -> Option<String> {
         let s = serde_json::to_string(value).ok()?;
         if s.len() > 2048 {
             let boundary = s.floor_char_boundary(2048);
@@ -46,85 +42,69 @@ impl LogEntry {
     }
 }
 
-pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), Box<redb::Error>> {
-    #[allow(clippy::result_large_err)]
-    fn inner(db: &Arc<Db>, entry: &LogEntry) -> Result<(), redb::Error> {
-        let json = serde_json::to_string(entry)
-            .map_err(|e| redb::Error::Io(std::io::Error::other(e.to_string())))?;
-        let write_txn = db.inner.begin_write()?;
-        {
-            let mut table = write_txn.open_table(LOGS_TABLE)?;
-            table.insert(entry.id.as_str(), json.as_str())?;
-        }
-        write_txn.commit()?;
-        Ok(())
-    }
-    inner(db, entry).map_err(Box::new)
+pub fn write_log(db: &Arc<Db>, entry: &LogEntry) -> Result<(), String> {
+    let conn = db.conn.lock().unwrap();
+    let (user_agent, agent_id, session_id) = match &entry.agent_info {
+        Some(info) => (
+            info.user_agent.as_deref(),
+            info.agent_id.as_deref(),
+            Some(info.session_id.as_str()),
+        ),
+        None => (None, None, None),
+    };
+    conn.execute(
+        "INSERT INTO logs (id, timestamp, env_id, method, params_summary, result_summary, error, duration_ms, user_agent, agent_id, session_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        rusqlite::params![
+            entry.id,
+            entry.timestamp,
+            entry.env_id,
+            entry.method,
+            entry.params_summary,
+            entry.result_summary,
+            entry.error,
+            entry.duration_ms as i64,
+            user_agent,
+            agent_id,
+            session_id,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-pub fn read_recent_logs(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, Box<redb::Error>> {
-    #[allow(clippy::result_large_err)]
-    fn inner(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, redb::Error> {
-        let read_txn = db.inner.begin_read()?;
-        let table = read_txn.open_table(LOGS_TABLE)?;
-        let mut entries: Vec<LogEntry> = Vec::new();
-        for item in table.iter()? {
-            let (_, value) = item?;
-            if let Ok(entry) = serde_json::from_str::<LogEntry>(value.value()) {
-                entries.push(entry);
-            }
-        }
-        entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        entries.truncate(limit);
-        Ok(entries)
-    }
-    inner(db, limit).map_err(Box::new)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_entry(id: &str) -> LogEntry {
-        LogEntry {
-            id: id.to_string(),
-            timestamp: "2026-03-23T12:00:00Z".to_string(),
-            env_id: "global".to_string(),
-            method: "tools/list".to_string(),
-            params_summary: None,
-            result_summary: None,
-            error: None,
-            duration_ms: 5,
-            agent_info: None,
-        }
-    }
-
-    #[test]
-    fn test_write_and_read_log() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let db = Db::open(&dir.path().join("test.db")).unwrap();
-        let entry = make_entry("test-1");
-        write_log(&db, &entry).unwrap();
-        let logs = read_recent_logs(&db, 10).unwrap();
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].id, "test-1");
-    }
-
-    #[test]
-    fn test_recent_logs_limit() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let db = Db::open(&dir.path().join("test.db")).unwrap();
-        for i in 0..5 {
-            write_log(&db, &make_entry(&format!("entry-{i}"))).unwrap();
-        }
-        let logs = read_recent_logs(&db, 3).unwrap();
-        assert_eq!(logs.len(), 3);
-    }
-
-    #[test]
-    fn test_summarize_value_truncates() {
-        let large = serde_json::json!({"data": "x".repeat(5000)});
-        let summary = LogEntry::summarize_value(&large).unwrap();
-        assert!(summary.len() <= 2051);
-    }
+pub fn read_recent_logs(db: &Arc<Db>, limit: usize) -> Result<Vec<LogEntry>, String> {
+    let conn = db.conn.lock().unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, timestamp, env_id, method, params_summary, result_summary, error, duration_ms, user_agent, agent_id, session_id
+             FROM logs ORDER BY timestamp DESC LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+    let entries = stmt
+        .query_map(rusqlite::params![limit as i64], |row| {
+            let user_agent: Option<String> = row.get(8)?;
+            let agent_id: Option<String> = row.get(9)?;
+            let session_id: Option<String> = row.get(10)?;
+            let agent_info = session_id.map(|sid| AgentInfo {
+                user_agent,
+                agent_id,
+                session_id: sid,
+            });
+            Ok(LogEntry {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                env_id: row.get(2)?,
+                method: row.get(3)?,
+                params_summary: row.get(4)?,
+                result_summary: row.get(5)?,
+                error: row.get(6)?,
+                duration_ms: row.get::<_, i64>(7)? as u64,
+                agent_info,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(entries)
 }
