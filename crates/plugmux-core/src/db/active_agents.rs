@@ -37,3 +37,35 @@ pub fn load_active(db: &Arc<Db>) -> Result<HashSet<String>, String> {
         .collect();
     Ok(ids)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mark_active_returns_true_for_new() {
+        let db = Db::open_in_memory().unwrap();
+        let result = mark_active(&db, "agent-1").unwrap();
+        assert!(result, "first mark_active call should return true");
+    }
+
+    #[test]
+    fn test_mark_active_returns_false_for_existing() {
+        let db = Db::open_in_memory().unwrap();
+        let first = mark_active(&db, "agent-1").unwrap();
+        let second = mark_active(&db, "agent-1").unwrap();
+        assert!(first, "first call should return true");
+        assert!(!second, "second call with same id should return false");
+    }
+
+    #[test]
+    fn test_load_active_returns_all() {
+        let db = Db::open_in_memory().unwrap();
+        mark_active(&db, "agent-a").unwrap();
+        mark_active(&db, "agent-b").unwrap();
+        let active = load_active(&db).unwrap();
+        assert_eq!(active.len(), 2);
+        assert!(active.contains("agent-a"));
+        assert!(active.contains("agent-b"));
+    }
+}
