@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getConfig,
+  listEnvironments,
   createEnvironment,
   deleteEnvironment,
   renameEnvironment,
@@ -12,11 +13,13 @@ import { useEvents } from "./useEvents";
 
 export function useConfig() {
   const [config, setConfig] = useState<Config | null>(null);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
 
   const reload = useCallback(async () => {
-    const cfg = await getConfig();
+    const [cfg, envs] = await Promise.all([getConfig(), listEnvironments()]);
     setConfig(cfg);
+    setEnvironments(envs);
     setLoading(false);
   }, []);
 
@@ -32,6 +35,7 @@ export function useConfig() {
 
   return {
     config,
+    environments,
     loading,
     reload,
     createEnvironment: async (name: string): Promise<Environment> => {

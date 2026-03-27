@@ -1,7 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Badge } from "@/components/ui/badge";
 import { StatusDot, type StatusVariant } from "@/components/ui/status-dot";
+import { AgentIcon } from "@/components/agents/AgentIcon";
+import { getAgentRegistry, type AgentEntry } from "@/lib/commands";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -38,8 +48,42 @@ function logStatus(log: LogEntry): { variant: StatusVariant; label: string } {
 export function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [registry, setRegistry] = useState<AgentEntry[]>([]);
 
-  async function fetchLogs() {
+  const agentMap = useMemo(() => {
+    const map = new Map<string, { name: string; icon: string | null }>();
+    for (const agent of registry) {
+      map.set(agent.id, { name: agent.name, icon: agent.icon });
+    }
+    return map;
+  }, [registry]);
+
+  const [filterAgent, setFilterAgent] = useState<string>("all");
+  const [filterEnv, setFilterEnv] = useState<string>("all");
+
+  useEffect(() => {
+    getAgentRegistry().then(setRegistry);
+  }, []);
+
+  // Unique values for filter dropdowns
+  const envIds = useMemo(
+    () => [...new Set(logs.map((l) => l.env_id))].sort(),
+    [logs],
+  );
+  const agentIds = useMemo(
+    () => [...new Set(logs.map((l) => l.agent_info?.agent_id).filter(Boolean) as string[])].sort(),
+    [logs],
+  );
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (filterAgent !== "all" && log.agent_info?.agent_id !== filterAgent) return false;
+      if (filterEnv !== "all" && log.env_id !== filterEnv) return false;
+      return true;
+    });
+  }, [logs, filterAgent, filterEnv]);
+
+  const fetchLogs = useCallback(async () => {
     try {
       const entries = await invoke<LogEntry[]>("get_recent_logs", {
         limit: 100,
@@ -49,67 +93,107 @@ export function LogsPage() {
     } catch (e) {
       setError(String(e));
     }
-  }
+  }, []);
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    const unlisten = listen("log_added", () => {
+      fetchLogs();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [fetchLogs]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 overflow-hidden p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Logs</h1>
-        <span className="text-xs text-muted-foreground">
-          Auto-refreshing every 5s
-        </span>
+        <div className="flex items-center gap-2">
+          <Select value={filterEnv} onValueChange={setFilterEnv}>
+            <SelectTrigger className="h-7 w-[110px] text-xs">
+              <SelectValue placeholder="Env" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All envs</SelectItem>
+              {envIds.map((id) => (
+                <SelectItem key={id} value={id}>{id}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterAgent} onValueChange={setFilterAgent}>
+            <SelectTrigger className="h-7 w-[130px] text-xs">
+              <SelectValue placeholder="Agent" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All agents</SelectItem>
+              {agentIds.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {agentMap.get(id)?.name ?? id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {logs.length === 0 && !error && (
+      {filteredLogs.length === 0 && !error && (
         <p className="text-sm text-muted-foreground">
-          No logs yet. Logs appear when agents send requests to plugmux.
+          {logs.length === 0
+            ? "No logs yet. Logs appear when agents send requests to plugmux."
+            : "No logs match the current filters."}
         </p>
       )}
 
-      {logs.length > 0 && (
+      {filteredLogs.length > 0 && (
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/60">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow className="border-border/60 bg-muted/60 hover:bg-muted/60">
-                <TableHead className="w-4 pl-2 pr-0"></TableHead>
-                <TableHead className="w-[70px] pl-1.5 pr-1">Time</TableHead>
-                <TableHead className="w-[80px] px-1">Env</TableHead>
-                <TableHead className="px-2">Method</TableHead>
-                <TableHead className="px-2">Agent</TableHead>
-                <TableHead className="px-2 text-right">ms</TableHead>
+                <TableHead className="w-8 px-2"></TableHead>
+                <TableHead className="w-[85px] px-2">Time</TableHead>
+                <TableHead className="w-[80px] px-2">Env</TableHead>
+                <TableHead className="w-full px-2">Method</TableHead>
+                <TableHead className="w-[130px] px-2 pr-4">Agent</TableHead>
+                <TableHead className="w-[56px] pl-2 pr-3 text-right">ms</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.map((log) => {
+              {filteredLogs.map((log) => {
                 const { variant, label } = logStatus(log);
                 return (
                   <TableRow key={log.id} className="border-border/40">
-                    <TableCell className="w-4 pl-2 pr-0 text-center">
+                    <TableCell className="w-8 px-2 text-center">
                       <StatusDot status={variant} label={label} />
                     </TableCell>
-                    <TableCell className="w-[70px] whitespace-nowrap pl-1.5 pr-1 text-muted-foreground">
+                    <TableCell className="w-[85px] whitespace-nowrap px-2 text-muted-foreground">
                       {formatTime(log.timestamp)}
                     </TableCell>
-                    <TableCell className="w-[80px] px-1">
+                    <TableCell className="w-[80px] px-2">
                       <Badge variant="outline" className="max-w-[72px] truncate font-mono text-xs">
                         {log.env_id}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[180px] truncate px-2 font-mono">
+                    <TableCell className="truncate px-2 font-mono">
                       {log.method}
                     </TableCell>
-                    <TableCell className="max-w-[100px] truncate px-2 text-muted-foreground">
-                      {log.agent_info?.agent_id || "—"}
+                    <TableCell className="w-[130px] truncate px-2 pr-4 text-muted-foreground">
+                      {(() => {
+                        const id = log.agent_info?.agent_id;
+                        if (!id) return "—";
+                        const agent = agentMap.get(id);
+                        if (!agent) return <span className="truncate">{id}</span>;
+                        return (
+                          <span className="flex items-center gap-1.5 truncate">
+                            <AgentIcon icon={agent.icon} name={agent.name} className="h-4 w-4 shrink-0" />
+                            <span className="truncate">{agent.name}</span>
+                          </span>
+                        );
+                      })()}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap px-2 text-right tabular-nums">
+                    <TableCell className="w-[56px] whitespace-nowrap pl-2 pr-3 text-right tabular-nums">
                       {log.duration_ms}
                     </TableCell>
                   </TableRow>

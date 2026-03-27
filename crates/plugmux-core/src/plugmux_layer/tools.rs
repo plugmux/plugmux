@@ -12,17 +12,6 @@ use crate::proxy::ToolInfo;
 pub fn list_tools() -> Vec<ToolInfo> {
     vec![
         ToolInfo {
-            name: "plugmux__list_servers".to_string(),
-            description: "List all MCP servers with health status".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-            output_schema: None,
-            annotations: None,
-        },
-        ToolInfo {
             name: "plugmux__enable_server".to_string(),
             description: "Add a server to an environment".to_string(),
             input_schema: json!({
@@ -63,28 +52,22 @@ pub fn list_tools() -> Vec<ToolInfo> {
             annotations: None,
         },
         ToolInfo {
-            name: "plugmux__list_environments".to_string(),
-            description: "List all environments".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-            output_schema: None,
-            annotations: None,
-        },
-        ToolInfo {
-            name: "plugmux__server_status".to_string(),
-            description: "Detailed status of a server".to_string(),
+            name: "plugmux__add_environment".to_string(),
+            description: "Create a new environment. If name is not provided, ask the user what they want to name it. Optionally include server IDs to pre-populate the environment, or the user can add servers later.".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
-                    "server_id": {
+                    "name": {
                         "type": "string",
-                        "description": "The server ID to get status for"
+                        "description": "Human-readable name for the environment (e.g. 'Work', 'Personal'). Ask the user if not known."
+                    },
+                    "servers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional list of server IDs to add to the environment. Ask the user if they want to include servers now or add them later."
                     }
                 },
-                "required": ["server_id"]
+                "required": ["name"]
             }),
             output_schema: None,
             annotations: None,
@@ -113,9 +96,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_list_tools_returns_six_tools() {
+    fn test_list_tools_returns_four_tools() {
         let tools = list_tools();
-        assert_eq!(tools.len(), 6);
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]

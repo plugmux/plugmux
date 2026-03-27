@@ -1,9 +1,11 @@
+use std::collections::HashSet;
+
 use clap::Subcommand;
 use plugmux_core::agents::{
-    AgentRegistry, AgentState, AgentStatus, connect_agent, detect_all, disconnect_agent,
-    disconnect_and_restore,
+    AgentRegistry, AgentStatus, connect_agent, detect_all, disconnect_agent, disconnect_and_restore,
 };
 use plugmux_core::config;
+use plugmux_core::db::Db;
 
 #[derive(Subcommand)]
 pub enum AgentCommands {
@@ -31,12 +33,11 @@ pub enum AgentCommands {
 
 pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
     let registry = AgentRegistry::load_bundled();
-    let config_dir = config::config_dir();
-    let state = AgentState::load(&config_dir);
+    let db = Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
 
     match cmd {
         AgentCommands::List => {
-            let agents = detect_all(&registry, &state);
+            let agents = detect_all(&registry, &db, &HashSet::new());
             if agents.is_empty() {
                 println!("No agents detected.");
                 return Ok(());
@@ -45,8 +46,8 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", "-".repeat(70));
             for agent in &agents {
                 let status = match agent.status {
-                    AgentStatus::Green => "connected",
-                    AgentStatus::Yellow => "mixed",
+                    AgentStatus::Green => "active",
+                    AgentStatus::Yellow => "configured",
                     AgentStatus::Gray => "disconnected",
                 };
                 let path = agent.config_path.as_deref().unwrap_or("-");
@@ -59,7 +60,7 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
             let port = cfg.port;
 
             if *all {
-                let agents = detect_all(&registry, &state);
+                let agents = detect_all(&registry, &db, &HashSet::new());
                 for agent in agents.iter().filter(|a| a.installed) {
                     if let Some(entry) = registry.get_agent(&agent.id)
                         && let Some(path) = registry.resolve_config_path(entry)
@@ -105,7 +106,7 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         AgentCommands::Status => {
-            let agents = detect_all(&registry, &state);
+            let agents = detect_all(&registry, &db, &HashSet::new());
             let connected: Vec<_> = agents
                 .iter()
                 .filter(|a| matches!(a.status, AgentStatus::Green | AgentStatus::Yellow))
@@ -116,9 +117,9 @@ pub fn run(cmd: &AgentCommands) -> Result<(), Box<dyn std::error::Error>> {
             }
             for agent in connected {
                 let status_str = match agent.status {
-                    AgentStatus::Green => "plugmux only",
-                    AgentStatus::Yellow => "plugmux + others",
-                    AgentStatus::Gray => "unknown",
+                    AgentStatus::Green => "active",
+                    AgentStatus::Yellow => "configured",
+                    AgentStatus::Gray => "not connected",
                 };
                 println!("{} ({})", agent.name, status_str);
             }

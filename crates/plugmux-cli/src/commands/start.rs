@@ -5,6 +5,8 @@ use tokio::sync::RwLock;
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
 use plugmux_core::custom_servers::CustomServerStore;
+use plugmux_core::db::Db;
+use plugmux_core::db::environments as db_env;
 use plugmux_core::gateway::router;
 use plugmux_core::manager::ServerManager;
 use plugmux_core::migration;
@@ -20,17 +22,17 @@ const BANNER: &str = r#"
 "#;
 
 pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Check for migration
+    // 1. Open database and check for migration
     let catalog = CatalogRegistry::load_bundled();
+    let db = Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
     if migration::needs_migration() {
         println!("  Migrating config from Phase 2 to Phase 3...");
-        migration::migrate(&catalog)?;
+        migration::migrate(&catalog, &db)?;
         println!("  Migration complete.");
     }
 
-    // 2. Load config
-    let cfg_path = config::config_path();
-    let cfg = config::load_or_default(&cfg_path);
+    // 2. Load config (for port only)
+    let cfg = config::load_or_default(&config::config_path());
     let port = port.unwrap_or(cfg.port);
 
     // 3. Load custom servers
@@ -44,9 +46,11 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
 
     // 5. Start servers for each environment
     let manager = Arc::new(ServerManager::new());
+    let envs = db_env::list_environments(&db);
 
-    for env in &cfg.environments {
-        let resolved = resolver.resolve_all(&env.servers);
+    for env in &envs {
+        let server_ids = db_env::get_server_ids(&db, &env.id).unwrap_or_default();
+        let resolved = resolver.resolve_all(&server_ids);
         for rs in &resolved {
             if let Some(server_config) = &rs.config {
                 // Only start if not already running (avoid duplicate starts across envs)
@@ -74,20 +78,18 @@ pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     println!("  health:  http://127.0.0.1:{port}/health");
     println!();
 
-    if cfg.environments.is_empty() {
+    if envs.is_empty() {
         println!("  No environments configured.");
         println!("  Run `plugmux env create <name>` to get started.");
     } else {
         println!("  Environments:");
-        for env in &cfg.environments {
+        for env in &envs {
             println!("    {} -> http://127.0.0.1:{port}/env/{}", env.name, env.id);
         }
     }
     println!();
 
     // 7. Start axum server
-    let db = plugmux_core::db::Db::open(&plugmux_core::db::Db::default_path())
-        .map_err(|e| format!("failed to open database: {e}"))?;
     let config = Arc::new(RwLock::new(cfg));
     router::start_server(config, manager, port, Some(db)).await?;
 

@@ -26,7 +26,7 @@ export function Sidebar({
   onNavigate,
   onNewEnvironment,
 }: SidebarProps) {
-  const { config } = useConfig();
+  const { environments } = useConfig();
 
   return (
     <div className="flex h-full w-[220px] flex-col border-r bg-muted/30">
@@ -98,7 +98,7 @@ export function Sidebar({
           </button>
 
           {/* Other environments */}
-          {config?.environments
+          {environments
             .filter((env) => env.id !== "global")
             .map((env) => {
               const page = `env:${env.id}`;

@@ -18,6 +18,7 @@ use axum::{
 use futures::stream::Stream;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 use crate::config::Config;
@@ -32,6 +33,24 @@ use super::{agent_detect, logging};
 use crate::config::GLOBAL_ENV;
 
 // ---------------------------------------------------------------------------
+// Gateway callbacks — called from the hot path on every request
+// ---------------------------------------------------------------------------
+
+/// Information passed to the gateway callback on each JSON-RPC request.
+#[derive(Debug, Clone)]
+pub struct RequestEvent {
+    pub agent_id: Option<String>,
+    pub method: String,
+    pub env_id: String,
+    pub duration_ms: u64,
+    pub error: Option<String>,
+}
+
+/// Callback type for gateway events.
+/// The Tauri layer provides an implementation that emits UI events.
+pub type OnRequest = Arc<dyn Fn(RequestEvent) + Send + Sync>;
+
+// ---------------------------------------------------------------------------
 // Shared application state
 // ---------------------------------------------------------------------------
 
@@ -40,6 +59,7 @@ struct AppState {
     plugmux: Arc<PlugmuxLayer>,
     proxy: Arc<ProxyLayer>,
     db: Option<Arc<Db>>,
+    on_request: Option<OnRequest>,
 }
 
 // ---------------------------------------------------------------------------
@@ -51,14 +71,31 @@ pub fn build_router(
     config: Arc<RwLock<Config>>,
     manager: Arc<ServerManager>,
     db: Option<Arc<Db>>,
+    on_request: Option<OnRequest>,
 ) -> Router {
-    let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone()));
-    let proxy = Arc::new(ProxyLayer::new(config, manager));
-    let state = AppState { plugmux, proxy, db };
+    let plugmux = Arc::new(PlugmuxLayer::new(
+        config.clone(),
+        manager.clone(),
+        db.clone(),
+    ));
+    let proxy = Arc::new(ProxyLayer::new(config, manager, db.clone()));
+    let state = AppState {
+        plugmux,
+        proxy,
+        db,
+        on_request,
+    };
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .expose_headers(Any);
 
     Router::new()
         .route("/env/{env_id}", post(handle_jsonrpc).get(handle_sse))
         .route("/health", get(handle_health))
+        .layer(cors)
         .with_state(state)
 }
 
@@ -69,7 +106,7 @@ pub async fn start_server(
     port: u16,
     db: Option<Arc<Db>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let router = build_router(config, manager, db);
+    let router = build_router(config, manager, db, None);
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("plugmux gateway listening on http://{addr}");
@@ -143,6 +180,20 @@ async fn handle_jsonrpc(
             user_agent: user_agent.as_deref(),
             agent_id: agent_id.as_deref(),
             session_id: "default-session",
+        });
+    }
+
+    // Notify the Tauri layer
+    if let Some(ref cb) = state.on_request {
+        cb(RequestEvent {
+            agent_id: agent_id.clone(),
+            method: method.to_string(),
+            env_id: env_id.clone(),
+            duration_ms: duration.as_millis() as u64,
+            error: match &result {
+                Err(e) => Some(e.to_string()),
+                Ok(_) => None,
+            },
         });
     }
 

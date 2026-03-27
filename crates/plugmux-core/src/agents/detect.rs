@@ -1,15 +1,20 @@
+use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AgentEntry, AgentRegistry, AgentSource, AgentState, AgentTier, ConfigFormat};
+use crate::db::Db;
+use crate::db::agents as db_agents;
+
+use super::{AgentEntry, AgentRegistry, AgentSource, AgentTier, ConfigFormat};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentStatus {
-    Green,  // plugmux is the only MCP entry
-    Yellow, // plugmux present + other MCPs also present
-    Gray,   // not connected (no plugmux key, or not installed)
+    Green,  // agent has made MCP calls through plugmux
+    Yellow, // plugmux present in config, but no calls yet
+    Gray,   // plugmux not found in agent config
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,15 +26,18 @@ pub struct DetectedAgent {
     pub installed: bool,
     pub status: AgentStatus,
     pub source: String, // "auto", "registry", "custom"
+    pub tier: String,   // "auto", "manual"
+    pub install_url: Option<String>,
+    pub setup_hint: Option<String>,
 }
 
 /// Determines the plugmux connection status by inspecting an agent's config file.
 ///
-/// - If the file doesn't exist, returns Gray.
-/// - Parses the file according to `config_format` and looks for the `mcp_key` section.
-/// - If that section contains a "plugmux" key and nothing else -> Green.
-/// - If "plugmux" is present alongside other keys -> Yellow.
+/// - If the file doesn't exist or can't be parsed, returns Gray.
+/// - If the `mcp_key` section contains a "plugmux" key -> Yellow (configured, no calls yet).
 /// - Otherwise -> Gray.
+///
+/// Note: Green is set externally when the agent has made actual MCP calls.
 pub fn detect_agent_status(
     config_path: &Path,
     config_format: &ConfigFormat,
@@ -57,16 +65,8 @@ fn detect_status_json(content: &str, mcp_key: &str) -> AgentStatus {
         _ => return AgentStatus::Gray,
     };
 
-    if mcp_section.is_empty() {
-        return AgentStatus::Gray;
-    }
-
     if mcp_section.contains_key("plugmux") {
-        if mcp_section.len() == 1 {
-            AgentStatus::Green
-        } else {
-            AgentStatus::Yellow
-        }
+        AgentStatus::Yellow
     } else {
         AgentStatus::Gray
     }
@@ -83,16 +83,8 @@ fn detect_status_toml(content: &str, mcp_key: &str) -> AgentStatus {
         _ => return AgentStatus::Gray,
     };
 
-    if mcp_section.is_empty() {
-        return AgentStatus::Gray;
-    }
-
     if mcp_section.contains_key("plugmux") {
-        if mcp_section.len() == 1 {
-            AgentStatus::Green
-        } else {
-            AgentStatus::Yellow
-        }
+        AgentStatus::Yellow
     } else {
         AgentStatus::Gray
     }
@@ -122,34 +114,55 @@ pub fn detect_agent(entry: &AgentEntry, registry: &AgentRegistry) -> DetectedAge
             AgentTier::Auto => "auto".to_string(),
             AgentTier::Manual => "registry".to_string(),
         },
+        tier: match entry.tier {
+            AgentTier::Auto => "auto".to_string(),
+            AgentTier::Manual => "manual".to_string(),
+        },
+        install_url: entry.install_url.clone(),
+        setup_hint: entry.setup_hint.clone(),
     }
 }
 
-/// Scans all agents from the registry and state, returning a deduplicated list
+/// Helper: parse a config_format string ("json"/"toml") into a ConfigFormat enum.
+fn parse_config_format(s: &str) -> Option<ConfigFormat> {
+    match s.to_lowercase().as_str() {
+        "json" => Some(ConfigFormat::Json),
+        "toml" => Some(ConfigFormat::Toml),
+        _ => None,
+    }
+}
+
+/// Scans all agents from the registry and db, returning a deduplicated list
 /// of detected agents.
 ///
 /// - All auto-tier agents from the registry are included.
-/// - Agents from state with registry/custom sources are also included.
+/// - Agents from db with registry/custom sources are also included.
 /// - Dismissed agents are excluded.
-pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedAgent> {
+/// - Agents whose ID appears in `active_agents` are promoted to Green.
+pub fn detect_all(
+    registry: &AgentRegistry,
+    db: &Arc<Db>,
+    active_agents: &HashSet<String>,
+) -> Vec<DetectedAgent> {
     let mut seen = std::collections::HashSet::new();
     let mut results = Vec::new();
 
     // Include all agents from registry (auto + manual)
     for entry in registry.list_agents() {
-        if state.is_dismissed(&entry.id) {
+        if db_agents::is_dismissed(db, &entry.id) {
             continue;
         }
         seen.insert(entry.id.clone());
         results.push(detect_agent(entry, registry));
     }
 
-    // Include agents from state (registry/custom sources) that aren't already covered
-    for state_entry in &state.agents {
+    // Include agents from db (registry/custom sources) that aren't already covered
+    let db_entries = db_agents::list_agents(db);
+    for state_entry in &db_entries {
         if seen.contains(&state_entry.id) {
             continue;
         }
-        if state.is_dismissed(&state_entry.id) {
+        if db_agents::is_dismissed(db, &state_entry.id) {
             continue;
         }
 
@@ -164,10 +177,15 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
 
             let status = match (
                 &config_path_buf,
-                &state_entry.config_format,
+                state_entry
+                    .config_format
+                    .as_deref()
+                    .and_then(parse_config_format),
                 &state_entry.mcp_key,
             ) {
-                (Some(p), Some(fmt), Some(key)) if installed => detect_agent_status(p, fmt, key),
+                (Some(p), Some(ref fmt), Some(key)) if installed => {
+                    detect_agent_status(p, fmt, key)
+                }
                 _ => AgentStatus::Gray,
             };
 
@@ -188,10 +206,20 @@ pub fn detect_all(registry: &AgentRegistry, state: &AgentState) -> Vec<DetectedA
                 installed,
                 status,
                 source: source.to_string(),
+                tier: "custom".to_string(),
+                install_url: None,
+                setup_hint: None,
             });
         }
 
         seen.insert(state_entry.id.clone());
+    }
+
+    // Promote Yellow → Green for agents that have made actual MCP calls
+    for agent in &mut results {
+        if active_agents.contains(&agent.id) && agent.status == AgentStatus::Yellow {
+            agent.status = AgentStatus::Green;
+        }
     }
 
     // Sort by registry order — agents in the registry come first in their defined order,
@@ -226,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn test_json_plugmux_only_returns_green() {
+    fn test_json_plugmux_only_returns_yellow() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.json");
         std::fs::write(
@@ -236,7 +264,7 @@ mod tests {
         .unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Json, "mcpServers");
-        assert_eq!(status, AgentStatus::Green);
+        assert_eq!(status, AgentStatus::Yellow);
     }
 
     #[test]
@@ -264,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn test_toml_plugmux_only_returns_green() {
+    fn test_toml_plugmux_only_returns_yellow() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         std::fs::write(
@@ -274,7 +302,7 @@ mod tests {
         .unwrap();
 
         let status = detect_agent_status(&path, &ConfigFormat::Toml, "mcp_servers");
-        assert_eq!(status, AgentStatus::Green);
+        assert_eq!(status, AgentStatus::Yellow);
     }
 
     #[test]
@@ -346,10 +374,10 @@ mod tests {
         }"#;
 
         let registry = AgentRegistry::load(registry_json).unwrap();
-        let mut state = AgentState::default();
-        state.dismiss_agent("agent-a");
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db_agents::dismiss_agent(&db, "agent-a").unwrap();
 
-        let detected = detect_all(&registry, &state);
+        let detected = detect_all(&registry, &db, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(
@@ -384,17 +412,22 @@ mod tests {
         }"#;
 
         let registry = AgentRegistry::load(registry_json).unwrap();
-        let mut state = AgentState::default();
-        state.add_agent(super::super::AgentStateEntry {
-            id: "custom-agent".to_string(),
-            source: AgentSource::Custom,
-            name: Some("My Custom Agent".to_string()),
-            config_path: Some("/tmp/nonexistent-custom.json".to_string()),
-            config_format: Some(ConfigFormat::Json),
-            mcp_key: Some("mcpServers".to_string()),
-        });
+        let db = crate::db::Db::open_in_memory().unwrap();
+        db_agents::add_agent(
+            &db,
+            &crate::db::agents::AgentStateEntry {
+                id: "custom-agent".to_string(),
+                source: AgentSource::Custom,
+                name: Some("My Custom Agent".to_string()),
+                icon: None,
+                config_path: Some("/tmp/nonexistent-custom.json".to_string()),
+                config_format: Some("json".to_string()),
+                mcp_key: Some("mcpServers".to_string()),
+            },
+        )
+        .unwrap();
 
-        let detected = detect_all(&registry, &state);
+        let detected = detect_all(&registry, &db, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();
 
         assert!(ids.contains(&"agent-a"));

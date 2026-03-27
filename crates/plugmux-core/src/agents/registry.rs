@@ -32,6 +32,10 @@ pub struct AgentEntry {
     pub config_format: ConfigFormat,
     pub mcp_key: String,
     pub tier: AgentTier,
+    #[serde(default)]
+    pub install_url: Option<String>,
+    #[serde(default)]
+    pub setup_hint: Option<String>,
     pub config_paths: Option<ConfigPaths>,
 }
 

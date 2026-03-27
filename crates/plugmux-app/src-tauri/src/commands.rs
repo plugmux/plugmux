@@ -1,20 +1,31 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use plugmux_core::agents::{
-    AgentEntry, AgentRegistry, AgentSource, AgentState, AgentStateEntry, ConfigFormat,
-    DetectedAgent,
+    AgentEntry, AgentRegistry, AgentSource, AgentStateEntry, ConfigFormat, DetectedAgent,
 };
 use plugmux_core::catalog::{CatalogEntry, Preset};
-use plugmux_core::config::{self, Config, Environment, PermissionLevel, Permissions};
-use plugmux_core::db::logs::{self, LogEntry};
+use plugmux_core::config::{Config, PermissionLevel, Permissions};
+use plugmux_core::db::{
+    self, environments as db_envs,
+    logs::{self, LogEntry},
+};
 use plugmux_core::environment;
 use plugmux_core::migration;
 use plugmux_core::server::{HealthStatus, ServerConfig};
 
 use crate::engine::Engine;
 use crate::events;
+
+/// Serializable environment for Tauri commands (mirrors `db::environments::EnvironmentRow`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Environment {
+    pub id: String,
+    pub name: String,
+    pub servers: Vec<String>,
+}
 
 // ---------------------------------------------------------------------------
 // Engine commands
@@ -115,8 +126,17 @@ pub async fn set_permission(
 
 #[tauri::command]
 pub async fn list_environments(engine: State<'_, Arc<Engine>>) -> Result<Vec<Environment>, String> {
-    let cfg = engine.config.read().await;
-    Ok(cfg.environments.clone())
+    let rows = db_envs::list_environments(&engine.db);
+    let mut envs = Vec::with_capacity(rows.len());
+    for row in rows {
+        let servers = db_envs::get_server_ids(&engine.db, &row.id).unwrap_or_default();
+        envs.push(Environment {
+            id: row.id,
+            name: row.name,
+            servers,
+        });
+    }
+    Ok(envs)
 }
 
 #[tauri::command]
@@ -125,20 +145,17 @@ pub async fn create_environment(
     app: AppHandle,
     name: String,
 ) -> Result<Environment, String> {
-    let env;
-    {
-        let mut cfg = engine.config.write().await;
-        let created = config::add_environment(&mut cfg, &name);
-        env = created.clone();
-    }
-    engine.save_config().await?;
+    let id = plugmux_core::slug::slugify(&name);
+    db_envs::add_environment(&engine.db, &id, &name)?;
     let _ = app.emit(
         events::ENVIRONMENT_CREATED,
-        events::EnvironmentChangedPayload {
-            env_id: env.id.clone(),
-        },
+        events::EnvironmentChangedPayload { env_id: id.clone() },
     );
-    Ok(env)
+    Ok(Environment {
+        id,
+        name,
+        servers: vec![],
+    })
 }
 
 #[tauri::command]
@@ -147,11 +164,7 @@ pub async fn delete_environment(
     app: AppHandle,
     id: String,
 ) -> Result<(), String> {
-    {
-        let mut cfg = engine.config.write().await;
-        config::remove_environment(&mut cfg, &id).map_err(|e| e.to_string())?;
-    }
-    engine.save_config().await?;
+    db_envs::remove_environment(&engine.db, &id)?;
     let _ = app.emit(
         events::ENVIRONMENT_DELETED,
         events::EnvironmentChangedPayload { env_id: id },
@@ -165,13 +178,13 @@ pub async fn rename_environment(
     id: String,
     name: String,
 ) -> Result<(), String> {
-    {
-        let mut cfg = engine.config.write().await;
-        let env = config::find_environment_mut(&mut cfg, &id)
-            .ok_or_else(|| format!("Environment not found: {id}"))?;
-        env.name = name;
-    }
-    engine.save_config().await
+    let conn = engine.db.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE environments SET name = ?1 WHERE id = ?2",
+        rusqlite::params![name, id],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -185,11 +198,7 @@ pub async fn add_server_to_env(
     env_id: String,
     server_id: String,
 ) -> Result<(), String> {
-    {
-        let mut cfg = engine.config.write().await;
-        environment::add_server(&mut cfg, &env_id, &server_id).map_err(|e| e.to_string())?;
-    }
-    engine.save_config().await?;
+    environment::add_server(&engine.db, &env_id, &server_id)?;
     let _ = app.emit(
         events::SERVER_ADDED,
         events::ServerChangedPayload { server_id, env_id },
@@ -204,11 +213,7 @@ pub async fn remove_server_from_env(
     env_id: String,
     server_id: String,
 ) -> Result<(), String> {
-    {
-        let mut cfg = engine.config.write().await;
-        environment::remove_server(&mut cfg, &env_id, &server_id).map_err(|e| e.to_string())?;
-    }
-    engine.save_config().await?;
+    environment::remove_server(&engine.db, &env_id, &server_id)?;
     let _ = app.emit(
         events::SERVER_REMOVED,
         events::ServerChangedPayload { server_id, env_id },
@@ -342,21 +347,21 @@ pub async fn create_env_from_preset(
         .ok_or_else(|| format!("Preset not found: {preset_id}"))?
         .clone();
 
-    let env;
-    {
-        let mut cfg = engine.config.write().await;
-        let created = config::add_environment(&mut cfg, &name);
-        created.servers = preset.servers;
-        env = created.clone();
+    let id = plugmux_core::slug::slugify(&name);
+    db_envs::add_environment(&engine.db, &id, &name)?;
+    for server_id in &preset.servers {
+        db_envs::add_server(&engine.db, &id, server_id)?;
     }
-    engine.save_config().await?;
+
     let _ = app.emit(
         events::ENVIRONMENT_CREATED,
-        events::EnvironmentChangedPayload {
-            env_id: env.id.clone(),
-        },
+        events::EnvironmentChangedPayload { env_id: id.clone() },
     );
-    Ok(env)
+    Ok(Environment {
+        id,
+        name,
+        servers: preset.servers,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -388,11 +393,16 @@ pub async fn get_agent_registry() -> Result<Vec<AgentEntry>, String> {
 }
 
 #[tauri::command]
-pub async fn detect_agents() -> Result<Vec<DetectedAgent>, String> {
+pub async fn detect_agents(engine: State<'_, Arc<Engine>>) -> Result<Vec<DetectedAgent>, String> {
     let registry = AgentRegistry::load_bundled();
-    let config_dir = plugmux_core::config::config_dir();
-    let state = AgentState::load(&config_dir);
-    Ok(plugmux_core::agents::detect_all(&registry, &state))
+    let active = engine
+        .active_agents
+        .read()
+        .map_err(|e| e.to_string())?
+        .clone();
+    Ok(plugmux_core::agents::detect_all(
+        &registry, &engine.db, &active,
+    ))
 }
 
 #[tauri::command]
@@ -401,11 +411,10 @@ pub async fn connect_agent_cmd(
     agent_id: String,
 ) -> Result<Option<String>, String> {
     let registry = AgentRegistry::load_bundled();
-    let config_dir = plugmux_core::config::config_dir();
-    let state = AgentState::load(&config_dir);
     let port = *engine.port.read().await;
 
-    let (config_path, config_format, mcp_key) = resolve_agent_config(&registry, &state, &agent_id)?;
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &engine.db, &agent_id)?;
 
     let result = plugmux_core::agents::connect_agent(&config_path, &config_format, &mcp_key, port)?;
 
@@ -413,12 +422,15 @@ pub async fn connect_agent_cmd(
 }
 
 #[tauri::command]
-pub async fn disconnect_agent_cmd(agent_id: String, restore: bool) -> Result<(), String> {
+pub async fn disconnect_agent_cmd(
+    engine: State<'_, Arc<Engine>>,
+    agent_id: String,
+    restore: bool,
+) -> Result<(), String> {
     let registry = AgentRegistry::load_bundled();
-    let config_dir = plugmux_core::config::config_dir();
-    let state = AgentState::load(&config_dir);
 
-    let (config_path, config_format, mcp_key) = resolve_agent_config(&registry, &state, &agent_id)?;
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &engine.db, &agent_id)?;
 
     if restore {
         plugmux_core::agents::disconnect_and_restore(&config_path, &config_format, &mcp_key)
@@ -428,66 +440,72 @@ pub async fn disconnect_agent_cmd(agent_id: String, restore: bool) -> Result<(),
 }
 
 #[tauri::command]
-pub async fn has_agent_backup(agent_id: String) -> Result<bool, String> {
+pub async fn has_agent_backup(
+    engine: State<'_, Arc<Engine>>,
+    agent_id: String,
+) -> Result<bool, String> {
     let registry = AgentRegistry::load_bundled();
-    let config_dir = plugmux_core::config::config_dir();
-    let state = AgentState::load(&config_dir);
-    let (config_path, _, _) = resolve_agent_config(&registry, &state, &agent_id)?;
+    let (config_path, _, _) = resolve_agent_config(&registry, &engine.db, &agent_id)?;
     Ok(plugmux_core::agents::get_backup_path(&config_path).is_some())
 }
 
 #[tauri::command]
-pub async fn add_agent_from_registry(agent_id: String, config_path: String) -> Result<(), String> {
-    let config_dir = plugmux_core::config::config_dir();
-    let mut state = AgentState::load(&config_dir);
-    state.add_agent(AgentStateEntry {
-        id: agent_id,
-        source: AgentSource::Registry,
-        name: None,
-        config_path: Some(config_path),
-        config_format: None,
-        mcp_key: None,
-    });
-    state.save(&config_dir)
+pub async fn add_agent_from_registry(
+    engine: State<'_, Arc<Engine>>,
+    agent_id: String,
+    config_path: String,
+) -> Result<(), String> {
+    db::agents::add_agent(
+        &engine.db,
+        &AgentStateEntry {
+            id: agent_id,
+            source: AgentSource::Registry,
+            name: None,
+            icon: None,
+            config_path: Some(config_path),
+            config_format: None,
+            mcp_key: None,
+        },
+    )
 }
 
 #[tauri::command]
 pub async fn add_custom_agent(
+    engine: State<'_, Arc<Engine>>,
     name: String,
     config_path: String,
     config_format: String,
     mcp_key: String,
 ) -> Result<(), String> {
-    let config_dir = plugmux_core::config::config_dir();
-    let mut state = AgentState::load(&config_dir);
     let id = plugmux_core::slug::slugify(&name);
-    let format = match config_format.as_str() {
-        "toml" => ConfigFormat::Toml,
-        _ => ConfigFormat::Json,
+    // Normalize format string
+    let fmt = match config_format.as_str() {
+        "toml" => "toml",
+        _ => "json",
     };
-    state.add_agent(AgentStateEntry {
-        id,
-        source: AgentSource::Custom,
-        name: Some(name),
-        config_path: Some(config_path),
-        config_format: Some(format),
-        mcp_key: Some(mcp_key),
-    });
-    state.save(&config_dir)
+    db::agents::add_agent(
+        &engine.db,
+        &AgentStateEntry {
+            id,
+            source: AgentSource::Custom,
+            name: Some(name),
+            icon: None,
+            config_path: Some(config_path),
+            config_format: Some(fmt.to_string()),
+            mcp_key: Some(mcp_key),
+        },
+    )
 }
 
 #[tauri::command]
-pub async fn dismiss_agent(agent_id: String) -> Result<(), String> {
-    let config_dir = plugmux_core::config::config_dir();
-    let mut state = AgentState::load(&config_dir);
-    state.dismiss_agent(&agent_id);
-    state.save(&config_dir)
+pub async fn dismiss_agent(engine: State<'_, Arc<Engine>>, agent_id: String) -> Result<(), String> {
+    db::agents::dismiss_agent(&engine.db, &agent_id)
 }
 
-/// Resolves agent config details from registry or state.
+/// Resolves agent config details from registry or db.
 fn resolve_agent_config(
     registry: &AgentRegistry,
-    state: &AgentState,
+    db: &Arc<db::Db>,
     agent_id: &str,
 ) -> Result<(std::path::PathBuf, ConfigFormat, String), String> {
     // Try registry first
@@ -498,8 +516,8 @@ fn resolve_agent_config(
         return Ok((path, entry.config_format.clone(), entry.mcp_key.clone()));
     }
 
-    // Try state (custom/registry agents)
-    if let Some(state_entry) = state.get_agent(agent_id) {
+    // Try db (custom/registry agents)
+    if let Some(state_entry) = db::agents::get_agent(db, agent_id) {
         let path_str = state_entry
             .config_path
             .as_ref()
@@ -513,10 +531,10 @@ fn resolve_agent_config(
                     .as_ref(),
             ),
         );
-        let format = state_entry
-            .config_format
-            .clone()
-            .unwrap_or(ConfigFormat::Json);
+        let format = match state_entry.config_format.as_deref() {
+            Some("toml") => ConfigFormat::Toml,
+            _ => ConfigFormat::Json,
+        };
         let mcp_key = state_entry
             .mcp_key
             .clone()
@@ -536,7 +554,7 @@ pub async fn migrate_config(engine: State<'_, Arc<Engine>>) -> Result<(), String
     if !migration::needs_migration() {
         return Err("No migration needed".to_string());
     }
-    migration::migrate(&engine.catalog).map_err(|e| e.to_string())?;
+    migration::migrate(&engine.catalog, &engine.db).map_err(|e| e.to_string())?;
     engine.reload_config().await?;
     engine.reload_custom_servers()
 }
@@ -550,10 +568,6 @@ pub async fn get_recent_logs(
     engine: State<'_, Arc<Engine>>,
     limit: Option<usize>,
 ) -> Result<Vec<LogEntry>, String> {
-    let db_guard = engine.db.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized — is the engine running?".to_string())?;
-    logs::read_recent_logs(db, limit.unwrap_or(100))
+    logs::read_recent_logs(&engine.db, limit.unwrap_or(100))
         .map_err(|e| format!("failed to read logs: {e}"))
 }
