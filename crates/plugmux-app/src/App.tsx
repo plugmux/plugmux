@@ -25,7 +25,7 @@ function App() {
       case "catalog":
         return <CatalogPage />;
       case "presets":
-        return <PresetsPage onNavigate={setActivePage} />;
+        return <PresetsPage />;
       case "settings":
         return <SettingsPage />;
       case "logs":

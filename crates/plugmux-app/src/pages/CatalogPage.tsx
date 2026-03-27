@@ -17,7 +17,7 @@ import { CategoryFilter } from "@/components/catalog/CategoryFilter";
 import { Pagination } from "@/components/catalog/Pagination";
 import { useCatalog } from "@/hooks/useCatalog";
 import { useConfig } from "@/hooks/useConfig";
-import type { CatalogEntry, RemoteCatalogServer, RemoteCollection } from "@/lib/commands";
+import type { RemoteCatalogServer, RemoteCollection } from "@/lib/commands";
 
 const CATEGORIES = [
   { id: "developer-tools", label: "Development" },
@@ -40,7 +40,24 @@ const CATEGORIES = [
 
 const PER_PAGE = 12;
 
-/** Convert RemoteCatalogServer to CatalogEntry for CatalogCard/CatalogDetail */
+/** Shape expected by CatalogCard/CatalogDetail (legacy) */
+interface CatalogEntry {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  categories?: string[];
+  transport: "stdio" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  connectivity: "local" | "online";
+  official?: boolean;
+  installs?: number;
+  added?: string;
+}
+
 function toCatalogEntry(s: RemoteCatalogServer): CatalogEntry {
   return {
     id: s.id,
@@ -61,7 +78,7 @@ function toCatalogEntry(s: RemoteCatalogServer): CatalogEntry {
 }
 
 export function CatalogPage() {
-  const { servers, collections, loading, isRemote } = useCatalog();
+  const { servers, collections, loading, error } = useCatalog();
   const { environments, addServerToEnv } = useConfig();
 
   const [tab, setTab] = useState<string>("discover");
@@ -184,17 +201,21 @@ export function CatalogPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
+        <p className="text-lg font-medium text-muted-foreground">Could not connect to API</p>
+        <p className="text-sm text-muted-foreground/60">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto p-6">
         {/* Title */}
         <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">MCP Catalog</h1>
-            {isRemote && (
-              <p className="mt-0.5 text-xs text-muted-foreground">Connected to plugmux API</p>
-            )}
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight">MCP Catalog</h1>
         </div>
 
         {/* Tabs */}

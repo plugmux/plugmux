@@ -31,6 +31,7 @@ export interface ServerConfig {
   description?: string;
 }
 
+/** @deprecated Use RemoteCatalogServer from the API instead */
 export interface CatalogEntry {
   id: string;
   name: string;
@@ -46,14 +47,6 @@ export interface CatalogEntry {
   official?: boolean;
   installs?: number;
   added?: string;
-}
-
-export interface Preset {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  servers: string[];
 }
 
 export type HealthStatus =
@@ -121,25 +114,6 @@ export const updateCustomServer = (id: string, config: ServerConfig) =>
   invoke<void>("update_custom_server", { id, config });
 export const removeCustomServer = (id: string) =>
   invoke<void>("remove_custom_server", { id });
-
-// ---------------------------------------------------------------------------
-// Catalog commands
-// ---------------------------------------------------------------------------
-
-export const listCatalogServers = () =>
-  invoke<CatalogEntry[]>("list_catalog_servers");
-export const searchCatalog = (query: string, category: string | null) =>
-  invoke<CatalogEntry[]>("search_catalog", { query, category });
-export const getCatalogEntry = (id: string) =>
-  invoke<CatalogEntry>("get_catalog_entry", { id });
-
-// ---------------------------------------------------------------------------
-// Preset commands
-// ---------------------------------------------------------------------------
-
-export const listPresets = () => invoke<Preset[]>("list_presets");
-export const createEnvFromPreset = (presetId: string, name: string) =>
-  invoke<Environment>("create_env_from_preset", { presetId, name });
 
 // ---------------------------------------------------------------------------
 // Health commands
