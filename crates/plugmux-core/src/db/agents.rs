@@ -88,9 +88,9 @@ pub fn get_agent(db: &Arc<Db>, id: &str) -> Option<AgentStateEntry> {
 /// Return all agents.
 pub fn list_agents(db: &Arc<Db>) -> Vec<AgentStateEntry> {
     let conn = db.conn.lock().unwrap();
-    let mut stmt = match conn.prepare(
-        "SELECT id, source, name, icon, config_path, config_format, mcp_key FROM agents",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT id, source, name, icon, config_path, config_format, mcp_key FROM agents")
+    {
         Ok(s) => s,
         Err(_) => return vec![],
     };
@@ -243,7 +243,10 @@ mod tests {
 
         dismiss_agent(&db, "agent-1").unwrap();
 
-        assert!(get_agent(&db, "agent-1").is_none(), "should be removed from agents");
+        assert!(
+            get_agent(&db, "agent-1").is_none(),
+            "should be removed from agents"
+        );
         assert!(list_dismissed(&db).contains(&"agent-1".to_string()));
     }
 
@@ -267,6 +270,10 @@ mod tests {
         dismiss_agent(&db, "agent-1").unwrap();
 
         assert!(is_dismissed(&db, "agent-1"));
-        assert_eq!(list_dismissed(&db).len(), 1, "no duplicates in dismissed_agents");
+        assert_eq!(
+            list_dismissed(&db).len(),
+            1,
+            "no duplicates in dismissed_agents"
+        );
     }
 }

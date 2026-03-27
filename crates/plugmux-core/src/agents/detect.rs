@@ -177,10 +177,15 @@ pub fn detect_all(
 
             let status = match (
                 &config_path_buf,
-                state_entry.config_format.as_deref().and_then(parse_config_format),
+                state_entry
+                    .config_format
+                    .as_deref()
+                    .and_then(parse_config_format),
                 &state_entry.mcp_key,
             ) {
-                (Some(p), Some(ref fmt), Some(key)) if installed => detect_agent_status(p, fmt, key),
+                (Some(p), Some(ref fmt), Some(key)) if installed => {
+                    detect_agent_status(p, fmt, key)
+                }
                 _ => AgentStatus::Gray,
             };
 
@@ -408,15 +413,19 @@ mod tests {
 
         let registry = AgentRegistry::load(registry_json).unwrap();
         let db = crate::db::Db::open_in_memory().unwrap();
-        db_agents::add_agent(&db, &crate::db::agents::AgentStateEntry {
-            id: "custom-agent".to_string(),
-            source: AgentSource::Custom,
-            name: Some("My Custom Agent".to_string()),
-            icon: None,
-            config_path: Some("/tmp/nonexistent-custom.json".to_string()),
-            config_format: Some("json".to_string()),
-            mcp_key: Some("mcpServers".to_string()),
-        }).unwrap();
+        db_agents::add_agent(
+            &db,
+            &crate::db::agents::AgentStateEntry {
+                id: "custom-agent".to_string(),
+                source: AgentSource::Custom,
+                name: Some("My Custom Agent".to_string()),
+                icon: None,
+                config_path: Some("/tmp/nonexistent-custom.json".to_string()),
+                config_format: Some("json".to_string()),
+                mcp_key: Some("mcpServers".to_string()),
+            },
+        )
+        .unwrap();
 
         let detected = detect_all(&registry, &db, &HashSet::new());
         let ids: Vec<&str> = detected.iter().map(|d| d.id.as_str()).collect();

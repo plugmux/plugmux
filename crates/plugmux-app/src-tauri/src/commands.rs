@@ -8,7 +8,10 @@ use plugmux_core::agents::{
 };
 use plugmux_core::catalog::{CatalogEntry, Preset};
 use plugmux_core::config::{Config, PermissionLevel, Permissions};
-use plugmux_core::db::{self, environments as db_envs, logs::{self, LogEntry}};
+use plugmux_core::db::{
+    self, environments as db_envs,
+    logs::{self, LogEntry},
+};
 use plugmux_core::environment;
 use plugmux_core::migration;
 use plugmux_core::server::{HealthStatus, ServerConfig};
@@ -146,9 +149,7 @@ pub async fn create_environment(
     db_envs::add_environment(&engine.db, &id, &name)?;
     let _ = app.emit(
         events::ENVIRONMENT_CREATED,
-        events::EnvironmentChangedPayload {
-            env_id: id.clone(),
-        },
+        events::EnvironmentChangedPayload { env_id: id.clone() },
     );
     Ok(Environment {
         id,
@@ -354,9 +355,7 @@ pub async fn create_env_from_preset(
 
     let _ = app.emit(
         events::ENVIRONMENT_CREATED,
-        events::EnvironmentChangedPayload {
-            env_id: id.clone(),
-        },
+        events::EnvironmentChangedPayload { env_id: id.clone() },
     );
     Ok(Environment {
         id,
@@ -394,16 +393,16 @@ pub async fn get_agent_registry() -> Result<Vec<AgentEntry>, String> {
 }
 
 #[tauri::command]
-pub async fn detect_agents(
-    engine: State<'_, Arc<Engine>>,
-) -> Result<Vec<DetectedAgent>, String> {
+pub async fn detect_agents(engine: State<'_, Arc<Engine>>) -> Result<Vec<DetectedAgent>, String> {
     let registry = AgentRegistry::load_bundled();
     let active = engine
         .active_agents
         .read()
         .map_err(|e| e.to_string())?
         .clone();
-    Ok(plugmux_core::agents::detect_all(&registry, &engine.db, &active))
+    Ok(plugmux_core::agents::detect_all(
+        &registry, &engine.db, &active,
+    ))
 }
 
 #[tauri::command]
@@ -414,7 +413,8 @@ pub async fn connect_agent_cmd(
     let registry = AgentRegistry::load_bundled();
     let port = *engine.port.read().await;
 
-    let (config_path, config_format, mcp_key) = resolve_agent_config(&registry, &engine.db, &agent_id)?;
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &engine.db, &agent_id)?;
 
     let result = plugmux_core::agents::connect_agent(&config_path, &config_format, &mcp_key, port)?;
 
@@ -429,7 +429,8 @@ pub async fn disconnect_agent_cmd(
 ) -> Result<(), String> {
     let registry = AgentRegistry::load_bundled();
 
-    let (config_path, config_format, mcp_key) = resolve_agent_config(&registry, &engine.db, &agent_id)?;
+    let (config_path, config_format, mcp_key) =
+        resolve_agent_config(&registry, &engine.db, &agent_id)?;
 
     if restore {
         plugmux_core::agents::disconnect_and_restore(&config_path, &config_format, &mcp_key)
@@ -497,10 +498,7 @@ pub async fn add_custom_agent(
 }
 
 #[tauri::command]
-pub async fn dismiss_agent(
-    engine: State<'_, Arc<Engine>>,
-    agent_id: String,
-) -> Result<(), String> {
+pub async fn dismiss_agent(engine: State<'_, Arc<Engine>>, agent_id: String) -> Result<(), String> {
     db::agents::dismiss_agent(&engine.db, &agent_id)
 }
 

@@ -115,7 +115,9 @@ pub fn load(path: &Path) -> Result<Config, ConfigError> {
 /// does not exist or cannot be parsed.
 pub fn load_or_default(path: &Path) -> Config {
     match std::fs::read_to_string(path) {
-        Ok(content) => serde_json::from_str::<Config>(&content).unwrap_or_else(|_| default_config()),
+        Ok(content) => {
+            serde_json::from_str::<Config>(&content).unwrap_or_else(|_| default_config())
+        }
         Err(_) => default_config(),
     }
 }

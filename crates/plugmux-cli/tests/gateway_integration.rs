@@ -52,10 +52,8 @@ async fn test_full_gateway_flow() {
     };
 
     let db = Db::open_in_memory().expect("failed to open in-memory database");
-    db_env::add_environment(&db, "test-env", "Test Environment")
-        .expect("failed to add test-env");
-    db_env::add_server(&db, "test-env", "mock-echo")
-        .expect("failed to add mock-echo to test-env");
+    db_env::add_environment(&db, "test-env", "Test Environment").expect("failed to add test-env");
+    db_env::add_server(&db, "test-env", "mock-echo").expect("failed to add mock-echo to test-env");
 
     // -----------------------------------------------------------------------
     // 2. Create ServerManager and start the mock server manually

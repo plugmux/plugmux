@@ -25,8 +25,16 @@ pub struct ProxyLayer {
 }
 
 impl ProxyLayer {
-    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>, db: Option<Arc<Db>>) -> Self {
-        Self { config, manager, db }
+    pub fn new(
+        config: Arc<RwLock<Config>>,
+        manager: Arc<ServerManager>,
+        db: Option<Arc<Db>>,
+    ) -> Self {
+        Self {
+            config,
+            manager,
+            db,
+        }
     }
 
     async fn server_ids(&self, env_id: &str) -> Result<Vec<String>, ProxyError> {

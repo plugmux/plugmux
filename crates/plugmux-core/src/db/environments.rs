@@ -15,10 +15,15 @@ pub fn list_environments(db: &Arc<Db>) -> Vec<EnvironmentRow> {
     let mut stmt = conn
         .prepare("SELECT id, name FROM environments ORDER BY created_at ASC")
         .expect("prepare list_environments");
-    stmt.query_map([], |row| Ok(EnvironmentRow { id: row.get(0)?, name: row.get(1)? }))
-        .expect("query list_environments")
-        .filter_map(|r| r.ok())
-        .collect()
+    stmt.query_map([], |row| {
+        Ok(EnvironmentRow {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
+    })
+    .expect("query list_environments")
+    .filter_map(|r| r.ok())
+    .collect()
 }
 
 /// Insert a new environment. Returns an error if the id already exists.
@@ -38,16 +43,21 @@ pub fn remove_environment(db: &Arc<Db>, id: &str) -> Result<(), String> {
         return Err("cannot remove the global environment".to_string());
     }
     let conn = db.conn.lock().unwrap();
-    conn.execute("DELETE FROM environments WHERE id = ?1", rusqlite::params![id])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    conn.execute(
+        "DELETE FROM environments WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Return the server ids assigned to the given environment.
 pub fn get_server_ids(db: &Arc<Db>, env_id: &str) -> Result<Vec<String>, String> {
     let conn = db.conn.lock().unwrap();
     let mut stmt = conn
-        .prepare("SELECT server_id FROM environment_servers WHERE env_id = ?1 ORDER BY server_id ASC")
+        .prepare(
+            "SELECT server_id FROM environment_servers WHERE env_id = ?1 ORDER BY server_id ASC",
+        )
         .map_err(|e| e.to_string())?;
     let ids = stmt
         .query_map(rusqlite::params![env_id], |row| row.get(0))

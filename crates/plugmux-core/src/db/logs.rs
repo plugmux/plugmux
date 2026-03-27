@@ -179,7 +179,10 @@ mod tests {
 
         let summary = LogEntry::summarize_value(&value).unwrap();
         // Must be truncated and end with "..."
-        assert!(summary.ends_with("..."), "expected summary to end with '...'");
+        assert!(
+            summary.ends_with("..."),
+            "expected summary to end with '...'"
+        );
         // The raw serialised form is >2048, so the summary must be shorter.
         let raw = serde_json::to_string(&value).unwrap();
         assert!(summary.len() < raw.len());

@@ -23,14 +23,18 @@ impl Db {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         Self::init_schema(&conn)?;
-        Ok(Arc::new(Self { conn: Mutex::new(conn) }))
+        Ok(Arc::new(Self {
+            conn: Mutex::new(conn),
+        }))
     }
 
     pub fn open_in_memory() -> Result<Arc<Self>, rusqlite::Error> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         Self::init_schema(&conn)?;
-        Ok(Arc::new(Self { conn: Mutex::new(conn) }))
+        Ok(Arc::new(Self {
+            conn: Mutex::new(conn),
+        }))
     }
 
     fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -109,7 +113,11 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let conn = db.conn.lock().unwrap();
         let name: String = conn
-            .query_row("SELECT name FROM environments WHERE id = 'global'", [], |r| r.get(0))
+            .query_row(
+                "SELECT name FROM environments WHERE id = 'global'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(name, "Global");
     }
@@ -118,8 +126,15 @@ mod tests {
     fn test_open_in_memory_creates_all_tables() {
         let db = Db::open_in_memory().unwrap();
         let conn = db.conn.lock().unwrap();
-        let tables = ["environments", "environment_servers", "bookmarks", "agents",
-                       "dismissed_agents", "logs", "active_agents"];
+        let tables = [
+            "environments",
+            "environment_servers",
+            "bookmarks",
+            "agents",
+            "dismissed_agents",
+            "logs",
+            "active_agents",
+        ];
         for table in tables {
             let count: i64 = conn
                 .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))

@@ -47,7 +47,11 @@ pub fn migrate(catalog: &CatalogRegistry, db: &Arc<Db>) -> Result<(), ConfigErro
     // 1. main.servers → "default" environment
     let main_server_ids =
         process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
-    env_data.push(("default".to_string(), "Default".to_string(), main_server_ids));
+    env_data.push((
+        "default".to_string(),
+        "Default".to_string(),
+        main_server_ids,
+    ));
 
     // 2. Each old environment → its own environment entry
     if let Some(envs) = old_json["environments"].as_array() {
@@ -661,7 +665,11 @@ mod tests {
 
         let main_server_ids =
             process_servers(&old_json["main"]["servers"], catalog, &mut custom_servers);
-        env_data.push(("default".to_string(), "Default".to_string(), main_server_ids));
+        env_data.push((
+            "default".to_string(),
+            "Default".to_string(),
+            main_server_ids,
+        ));
 
         if let Some(envs) = old_json["environments"].as_array() {
             for env in envs {

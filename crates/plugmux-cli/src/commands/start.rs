@@ -24,8 +24,7 @@ const BANNER: &str = r#"
 pub async fn run(port: Option<u16>) -> Result<(), Box<dyn std::error::Error>> {
     // 1. Open database and check for migration
     let catalog = CatalogRegistry::load_bundled();
-    let db = Db::open(&Db::default_path())
-        .map_err(|e| format!("failed to open database: {e}"))?;
+    let db = Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
     if migration::needs_migration() {
         println!("  Migrating config from Phase 2 to Phase 3...");
         migration::migrate(&catalog, &db)?;

@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "plugmux-app"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "axum",
  "dirs 6.0.0",
@@ -3010,7 +3010,7 @@ dependencies = [
 
 [[package]]
 name = "plugmux-cli"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "axum",
  "clap",
@@ -3026,7 +3026,7 @@ dependencies = [
 
 [[package]]
 name = "plugmux-core"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "async-trait",
  "axum",

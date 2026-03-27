@@ -15,10 +15,10 @@ use axum::{
     },
     routing::{get, post},
 };
-use tower_http::cors::{Any, CorsLayer};
 use futures::stream::Stream;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 use crate::config::Config;
@@ -73,9 +73,18 @@ pub fn build_router(
     db: Option<Arc<Db>>,
     on_request: Option<OnRequest>,
 ) -> Router {
-    let plugmux = Arc::new(PlugmuxLayer::new(config.clone(), manager.clone(), db.clone()));
+    let plugmux = Arc::new(PlugmuxLayer::new(
+        config.clone(),
+        manager.clone(),
+        db.clone(),
+    ));
     let proxy = Arc::new(ProxyLayer::new(config, manager, db.clone()));
-    let state = AppState { plugmux, proxy, db, on_request };
+    let state = AppState {
+        plugmux,
+        proxy,
+        db,
+        on_request,
+    };
 
     let cors = CorsLayer::new()
         .allow_origin(Any)

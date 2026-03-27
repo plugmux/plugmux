@@ -2,8 +2,7 @@ use std::collections::HashSet;
 
 use clap::Subcommand;
 use plugmux_core::agents::{
-    AgentRegistry, AgentStatus, connect_agent, detect_all, disconnect_agent,
-    disconnect_and_restore,
+    AgentRegistry, AgentStatus, connect_agent, detect_all, disconnect_agent, disconnect_and_restore,
 };
 use plugmux_core::config;
 use plugmux_core::db::Db;

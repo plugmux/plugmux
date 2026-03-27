@@ -1,9 +1,9 @@
 //! Tracks which agents have made at least one MCP call through the gateway.
 //! TODO: Rewrite with SQLite in Task 7
 
+use super::Db;
 use std::collections::HashSet;
 use std::sync::Arc;
-use super::Db;
 
 pub fn mark_active(db: &Arc<Db>, agent_id: &str) -> Result<bool, String> {
     let conn = db.conn.lock().unwrap();

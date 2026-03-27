@@ -119,7 +119,9 @@ pub fn run() {
                         };
                         // Persist to DB
                         if is_new {
-                            if let Err(e) = plugmux_core::db::active_agents::mark_active(&db_ref, id) {
+                            if let Err(e) =
+                                plugmux_core::db::active_agents::mark_active(&db_ref, id)
+                            {
                                 tracing::warn!(error = %e, "failed to persist active agent");
                             }
                         }

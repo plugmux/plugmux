@@ -17,9 +17,9 @@ use crate::config::{Config, PermissionLevel};
 use crate::db::Db;
 use crate::db::environments as db_envs;
 use crate::manager::ServerManager;
-use crate::slug::slugify;
 use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ResourceInfo, ToolInfo};
+use crate::slug::slugify;
 
 /// The plugmux management layer — served only on `/env/global`.
 pub struct PlugmuxLayer {
@@ -31,7 +31,11 @@ pub struct PlugmuxLayer {
 
 impl PlugmuxLayer {
     /// Create a new `PlugmuxLayer`.
-    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>, db: Option<Arc<Db>>) -> Self {
+    pub fn new(
+        config: Arc<RwLock<Config>>,
+        manager: Arc<ServerManager>,
+        db: Option<Arc<Db>>,
+    ) -> Self {
         Self {
             config,
             manager,
@@ -128,8 +132,7 @@ impl PlugmuxLayer {
             .await?;
 
         if let Some(ref db) = self.db {
-            db_envs::add_server(db, env_id, server_id)
-                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+            db_envs::add_server(db, env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
         } else {
             return Err(ProxyError::ToolCallFailed("database not available".into()));
         }
@@ -148,8 +151,7 @@ impl PlugmuxLayer {
             .await?;
 
         if let Some(ref db) = self.db {
-            db_envs::remove_server(db, env_id, server_id)
-                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+            db_envs::remove_server(db, env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
         } else {
             return Err(ProxyError::ToolCallFailed("database not available".into()));
         }
@@ -164,17 +166,16 @@ impl PlugmuxLayer {
         name: &str,
         servers: &[String],
     ) -> Result<Value, ProxyError> {
-        let db = self.db.as_ref().ok_or_else(|| {
-            ProxyError::ToolCallFailed("database not available".into())
-        })?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| ProxyError::ToolCallFailed("database not available".into()))?;
 
         let env_id = slugify(name);
-        db_envs::add_environment(db, &env_id, name)
-            .map_err(|e| ProxyError::ToolCallFailed(e))?;
+        db_envs::add_environment(db, &env_id, name).map_err(ProxyError::ToolCallFailed)?;
 
         for server_id in servers {
-            db_envs::add_server(db, &env_id, server_id)
-                .map_err(|e| ProxyError::ToolCallFailed(e))?;
+            db_envs::add_server(db, &env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
         }
 
         let msg = if servers.is_empty() {
@@ -203,14 +204,15 @@ impl PlugmuxLayer {
         })?;
         drop(pending);
 
-        let db = self.db.as_ref().ok_or_else(|| {
-            ProxyError::ToolCallFailed("database not available".into())
-        })?;
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| ProxyError::ToolCallFailed("database not available".into()))?;
 
         match action.action.as_str() {
             "enable_server" => {
                 db_envs::add_server(db, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e))?;
+                    .map_err(ProxyError::ToolCallFailed)?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' enabled in environment '{}'",
                     action.server_id, action.env_id
@@ -218,7 +220,7 @@ impl PlugmuxLayer {
             }
             "disable_server" => {
                 db_envs::remove_server(db, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e))?;
+                    .map_err(ProxyError::ToolCallFailed)?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' disabled in environment '{}'",
                     action.server_id, action.env_id
@@ -351,10 +353,10 @@ impl PlugmuxLayer {
                             if let Some(ref err) = e.error {
                                 obj["error"] = json!(err);
                             }
-                            if let Some(ref info) = e.agent_info {
-                                if let Some(ref agent_id) = info.agent_id {
-                                    obj["agent"] = json!(agent_id);
-                                }
+                            if let Some(ref info) = e.agent_info
+                                && let Some(ref agent_id) = info.agent_id
+                            {
+                                obj["agent"] = json!(agent_id);
                             }
                             obj
                         })
@@ -502,10 +504,7 @@ mod tests {
             PermissionLevel::Allow,
         ));
         let result = layer
-            .call_tool(
-                "plugmux__add_environment",
-                json!({"name": "Personal"}),
-            )
+            .call_tool("plugmux__add_environment", json!({"name": "Personal"}))
             .await;
         assert!(result.is_ok());
         let val = result.unwrap();
@@ -520,9 +519,7 @@ mod tests {
             PermissionLevel::Allow,
             PermissionLevel::Allow,
         ));
-        let result = layer
-            .call_tool("plugmux__add_environment", json!({}))
-            .await;
+        let result = layer.call_tool("plugmux__add_environment", json!({})).await;
         assert!(matches!(result, Err(ProxyError::ToolCallFailed(_))));
     }
 
