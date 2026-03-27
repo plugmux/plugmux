@@ -216,3 +216,98 @@ export const addCustomAgent = (
 
 export const dismissAgent = (agentId: string) =>
   invoke<void>("dismiss_agent", { agentId });
+
+// ---------------------------------------------------------------------------
+// Cloud API types
+// ---------------------------------------------------------------------------
+
+export interface RemoteCatalogServer {
+  id: string;
+  name: string;
+  description: string;
+  icon_key: string | null;
+  icon_hash: string | null;
+  categories: string[];
+  transport: "stdio" | "http";
+  command: string | null;
+  args: string[] | null;
+  url: string | null;
+  connectivity: "local" | "online";
+  official: boolean;
+  tool_count: number | null;
+  security_score: string | null;
+  smithery_url: string | null;
+  added_at: string;
+  updated_at: string;
+}
+
+export interface RemoteCatalogResponse {
+  servers: RemoteCatalogServer[];
+  next_cursor: string | null;
+}
+
+export interface RemoteCollection {
+  id: string;
+  name: string;
+  description: string;
+  icon: string | null;
+  sort_order: number;
+  server_ids?: string[];
+  servers?: RemoteCatalogServer[];
+}
+
+export interface RemoteCollectionsResponse {
+  collections: RemoteCollection[];
+}
+
+export interface ApiHealthResponse {
+  status: string;
+  version: string;
+}
+
+export interface AuthUser {
+  id: string;
+  github_username: string;
+  email: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Cloud API commands
+// ---------------------------------------------------------------------------
+
+export const apiHealth = () =>
+  invoke<ApiHealthResponse>("api_health");
+
+export const apiListServers = (opts?: {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  category?: string;
+}) =>
+  invoke<RemoteCatalogResponse>("api_list_servers", {
+    limit: opts?.limit ?? null,
+    cursor: opts?.cursor ?? null,
+    search: opts?.search ?? null,
+    category: opts?.category ?? null,
+  });
+
+export const apiGetServer = (id: string) =>
+  invoke<RemoteCatalogServer>("api_get_server", { id });
+
+export const apiListCollections = () =>
+  invoke<RemoteCollectionsResponse>("api_list_collections");
+
+export const apiGetCollection = (id: string) =>
+  invoke<RemoteCollection>("api_get_collection", { id });
+
+export const apiGetAuthUrl = () =>
+  invoke<string>("api_get_auth_url");
+
+export const apiSetToken = (token: string) =>
+  invoke<void>("api_set_token", { token });
+
+export const apiGetProfile = () =>
+  invoke<AuthUser>("api_get_profile");
+
+export const apiGetBaseUrl = () =>
+  invoke<string>("api_get_base_url");
