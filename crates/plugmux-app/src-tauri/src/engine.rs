@@ -9,10 +9,9 @@ use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config::{self, Config};
 use plugmux_core::custom_servers::CustomServerStore;
 use plugmux_core::db::Db;
-use plugmux_core::gateway::router;
+use plugmux_core::gateway::{router, OnRequest};
 use plugmux_core::health::start_health_checker;
 use plugmux_core::manager::ServerManager;
-use plugmux_core::migration;
 use plugmux_core::resolver::ServerResolver;
 
 /// Represents the current state of the engine.
@@ -43,8 +42,12 @@ pub struct Engine {
     pub manager: Arc<ServerManager>,
     pub status: Arc<RwLock<EngineStatus>>,
     pub port: Arc<RwLock<u16>>,
-    pub db: Arc<RwLock<Option<Arc<Db>>>>,
+    pub db: Arc<Db>,
     pub shutdown_tx: Arc<RwLock<Option<tokio::sync::oneshot::Sender<()>>>>,
+    /// Agent IDs that have made at least one MCP call through the gateway.
+    pub active_agents: Arc<std::sync::RwLock<HashSet<String>>>,
+    /// Callback provided by the Tauri layer — set via `set_on_request`.
+    on_request: Arc<RwLock<Option<OnRequest>>>,
 }
 
 impl Engine {
@@ -52,13 +55,8 @@ impl Engine {
         // Load catalog (bundled)
         let catalog = Arc::new(CatalogRegistry::load_bundled());
 
-        // Check migration
-        if migration::needs_migration() {
-            info!("Phase-2 config detected, running migration");
-            if let Err(e) = migration::migrate(&catalog) {
-                warn!(error = %e, "migration failed, starting with defaults");
-            }
-        }
+        // Open database (panic if it fails — can't run without it)
+        let db = Db::open(&Db::default_path()).expect("failed to open database");
 
         // Load config
         let cfg = config::load_or_default(&config::config_path());
@@ -80,9 +78,17 @@ impl Engine {
             manager: Arc::new(ServerManager::new()),
             status: Arc::new(RwLock::new(EngineStatus::Stopped)),
             port: Arc::new(RwLock::new(port)),
-            db: Arc::new(RwLock::new(None)),
+            db,
             shutdown_tx: Arc::new(RwLock::new(None)),
+            active_agents: Arc::new(std::sync::RwLock::new(HashSet::new())),
+            on_request: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Set the callback that the gateway will invoke on every request.
+    /// Call this before `start()` — typically from Tauri setup.
+    pub async fn set_on_request(&self, cb: OnRequest) {
+        *self.on_request.write().await = Some(cb);
     }
 
     /// Start the gateway: resolve server IDs from ALL environments, start unique
@@ -94,15 +100,12 @@ impl Engine {
         }
 
         let port = *self.port.read().await;
-        let cfg = self.config.read().await.clone();
 
-        // Collect all unique server IDs across all environments
-        let mut seen_ids = HashSet::new();
-        for env in &cfg.environments {
-            for server_id in &env.servers {
-                seen_ids.insert(server_id.clone());
-            }
-        }
+        // Collect all unique server IDs across all environments (from db)
+        let seen_ids: HashSet<String> =
+            plugmux_core::db::environments::get_all_server_ids(&self.db)
+                .into_iter()
+                .collect();
 
         // Resolve and start each unique server
         for server_id in &seen_ids {
@@ -135,10 +138,19 @@ impl Engine {
 
         info!("plugmux gateway listening on http://{addr}");
 
-        let db =
-            Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
-        *self.db.write().await = Some(db.clone());
-        let router = router::build_router(config, manager, Some(db));
+        let db = self.db.clone();
+
+        // Restore active agents from DB
+        match plugmux_core::db::active_agents::load_active(&db) {
+            Ok(ids) => {
+                let mut set = self.active_agents.write().unwrap();
+                *set = ids;
+                info!(count = set.len(), "restored active agents from DB");
+            }
+            Err(e) => warn!(error = %e, "failed to load active agents from DB"),
+        }
+        let on_request = self.on_request.read().await.clone();
+        let router = router::build_router(config, manager, Some(db), on_request);
         tokio::spawn(async move {
             let server = axum::serve(listener, router);
             tokio::select! {

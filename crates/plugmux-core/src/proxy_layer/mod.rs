@@ -13,24 +13,37 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
-use crate::environment;
+use crate::db::Db;
+use crate::db::environments as db_envs;
 use crate::manager::ServerManager;
 use crate::proxy::{PromptInfo, ProxyError, ResourceInfo, ToolInfo};
 
 pub struct ProxyLayer {
     pub config: Arc<RwLock<Config>>,
     pub manager: Arc<ServerManager>,
+    pub db: Option<Arc<Db>>,
 }
 
 impl ProxyLayer {
-    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>) -> Self {
-        Self { config, manager }
+    pub fn new(
+        config: Arc<RwLock<Config>>,
+        manager: Arc<ServerManager>,
+        db: Option<Arc<Db>>,
+    ) -> Self {
+        Self {
+            config,
+            manager,
+            db,
+        }
     }
 
     async fn server_ids(&self, env_id: &str) -> Result<Vec<String>, ProxyError> {
-        let cfg = self.config.read().await;
-        environment::get_server_ids(&cfg, env_id)
-            .ok_or_else(|| ProxyError::Transport(format!("environment not found: {env_id}")))
+        if let Some(ref db) = self.db {
+            db_envs::get_server_ids(db, env_id)
+                .map_err(|e| ProxyError::Transport(format!("environment error: {e}")))
+        } else {
+            Err(ProxyError::Transport("database not available".into()))
+        }
     }
 
     /// Aggregate items from all servers in an environment, skipping failures.

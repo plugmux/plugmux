@@ -14,25 +14,33 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{Config, PermissionLevel};
-use crate::environment;
+use crate::db::Db;
+use crate::db::environments as db_envs;
 use crate::manager::ServerManager;
 use crate::pending_actions::PendingActions;
 use crate::proxy::{ProxyError, ResourceInfo, ToolInfo};
+use crate::slug::slugify;
 
 /// The plugmux management layer — served only on `/env/global`.
 pub struct PlugmuxLayer {
     pub config: Arc<RwLock<Config>>,
     pub manager: Arc<ServerManager>,
     pub pending: Mutex<PendingActions>,
+    pub db: Option<Arc<Db>>,
 }
 
 impl PlugmuxLayer {
     /// Create a new `PlugmuxLayer`.
-    pub fn new(config: Arc<RwLock<Config>>, manager: Arc<ServerManager>) -> Self {
+    pub fn new(
+        config: Arc<RwLock<Config>>,
+        manager: Arc<ServerManager>,
+        db: Option<Arc<Db>>,
+    ) -> Self {
         Self {
             config,
             manager,
             pending: Mutex::new(PendingActions::new()),
+            db,
         }
     }
 
@@ -53,7 +61,6 @@ impl PlugmuxLayer {
         let stripped = name.strip_prefix("plugmux__").unwrap_or(name);
 
         match stripped {
-            "list_servers" => self.handle_list_servers().await,
             "enable_server" => {
                 let env_id = require_str(&args, "env_id")?;
                 let server_id = require_str(&args, "server_id")?;
@@ -64,10 +71,18 @@ impl PlugmuxLayer {
                 let server_id = require_str(&args, "server_id")?;
                 self.handle_disable_server(&env_id, &server_id).await
             }
-            "list_environments" => self.handle_list_environments().await,
-            "server_status" => {
-                let server_id = require_str(&args, "server_id")?;
-                self.handle_server_status(&server_id).await
+            "add_environment" => {
+                let name = require_str(&args, "name")?;
+                let servers = args
+                    .get("servers")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                self.handle_add_environment(&name, &servers).await
             }
             "confirm_action" => {
                 let action_id = require_str(&args, "action_id")?;
@@ -91,12 +106,12 @@ impl PlugmuxLayer {
                 Ok(wrap_resource(uri, &envs.to_string()))
             }
             "plugmux://agents" => {
-                // TODO: wire agent state
-                Ok(wrap_resource(uri, "[]"))
+                let agents = self.build_agents_json();
+                Ok(wrap_resource(uri, &agents.to_string()))
             }
             "plugmux://logs/recent" => {
-                // TODO: wire DB logs
-                Ok(wrap_resource(uri, "[]"))
+                let logs = self.build_logs_json();
+                Ok(wrap_resource(uri, &logs.to_string()))
             }
             _ => Err(ProxyError::Transport(format!(
                 "unknown plugmux resource: {uri}"
@@ -108,11 +123,6 @@ impl PlugmuxLayer {
     // Tool handlers
     // -----------------------------------------------------------------------
 
-    async fn handle_list_servers(&self) -> Result<Value, ProxyError> {
-        let servers = self.build_servers_json().await;
-        Ok(wrap_content(&servers.to_string()))
-    }
-
     async fn handle_enable_server(
         &self,
         env_id: &str,
@@ -121,12 +131,11 @@ impl PlugmuxLayer {
         self.check_permission(env_id, server_id, "enable_server")
             .await?;
 
-        let mut cfg = self.config.write().await;
-        environment::add_server(&mut cfg, env_id, server_id)
-            .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-
-        // Best-effort save.
-        let _ = crate::config::save(&crate::config::config_path(), &cfg);
+        if let Some(ref db) = self.db {
+            db_envs::add_server(db, env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
+        } else {
+            return Err(ProxyError::ToolCallFailed("database not available".into()));
+        }
 
         Ok(wrap_content(&format!(
             "Server '{server_id}' enabled in environment '{env_id}'"
@@ -141,41 +150,49 @@ impl PlugmuxLayer {
         self.check_permission(env_id, server_id, "disable_server")
             .await?;
 
-        let mut cfg = self.config.write().await;
-        environment::remove_server(&mut cfg, env_id, server_id)
-            .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-
-        // Best-effort save.
-        let _ = crate::config::save(&crate::config::config_path(), &cfg);
+        if let Some(ref db) = self.db {
+            db_envs::remove_server(db, env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
+        } else {
+            return Err(ProxyError::ToolCallFailed("database not available".into()));
+        }
 
         Ok(wrap_content(&format!(
             "Server '{server_id}' disabled in environment '{env_id}'"
         )))
     }
 
-    async fn handle_list_environments(&self) -> Result<Value, ProxyError> {
-        let envs = self.build_environments_json().await;
-        Ok(wrap_content(&envs.to_string()))
-    }
+    async fn handle_add_environment(
+        &self,
+        name: &str,
+        servers: &[String],
+    ) -> Result<Value, ProxyError> {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| ProxyError::ToolCallFailed("database not available".into()))?;
 
-    async fn handle_server_status(&self, server_id: &str) -> Result<Value, ProxyError> {
-        let healthy = self.manager.is_healthy(server_id).await;
-        let health = self.manager.get_health(server_id).await;
-        let tool_count = match self.manager.list_tools(server_id).await {
-            Ok(tools) => tools.len(),
-            Err(_) => 0,
+        let env_id = slugify(name);
+        db_envs::add_environment(db, &env_id, name).map_err(ProxyError::ToolCallFailed)?;
+
+        for server_id in servers {
+            db_envs::add_server(db, &env_id, server_id).map_err(ProxyError::ToolCallFailed)?;
+        }
+
+        let msg = if servers.is_empty() {
+            format!(
+                "Environment '{}' (id: {}) created. You can add servers later with enable_server.",
+                name, env_id
+            )
+        } else {
+            format!(
+                "Environment '{}' (id: {}) created with servers: {}",
+                name,
+                env_id,
+                servers.join(", ")
+            )
         };
 
-        let health_str = health.as_ref().map_or("not_found", |h| h.as_str());
-
-        let status = json!({
-            "server_id": server_id,
-            "healthy": healthy,
-            "health": health_str,
-            "tool_count": tool_count,
-        });
-
-        Ok(wrap_content(&status.to_string()))
+        Ok(wrap_content(&msg))
     }
 
     async fn handle_confirm_action(&self, action_id: &str) -> Result<Value, ProxyError> {
@@ -187,22 +204,23 @@ impl PlugmuxLayer {
         })?;
         drop(pending);
 
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| ProxyError::ToolCallFailed("database not available".into()))?;
+
         match action.action.as_str() {
             "enable_server" => {
-                let mut cfg = self.config.write().await;
-                environment::add_server(&mut cfg, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-                let _ = crate::config::save(&crate::config::config_path(), &cfg);
+                db_envs::add_server(db, &action.env_id, &action.server_id)
+                    .map_err(ProxyError::ToolCallFailed)?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' enabled in environment '{}'",
                     action.server_id, action.env_id
                 )))
             }
             "disable_server" => {
-                let mut cfg = self.config.write().await;
-                environment::remove_server(&mut cfg, &action.env_id, &action.server_id)
-                    .map_err(|e| ProxyError::ToolCallFailed(e.to_string()))?;
-                let _ = crate::config::save(&crate::config::config_path(), &cfg);
+                db_envs::remove_server(db, &action.env_id, &action.server_id)
+                    .map_err(ProxyError::ToolCallFailed)?;
                 Ok(wrap_content(&format!(
                     "Confirmed: server '{}' disabled in environment '{}'",
                     action.server_id, action.env_id
@@ -284,19 +302,72 @@ impl PlugmuxLayer {
     }
 
     async fn build_environments_json(&self) -> Value {
-        let cfg = self.config.read().await;
-        let envs: Vec<Value> = cfg
-            .environments
+        if let Some(ref db) = self.db {
+            let env_rows = db_envs::list_environments(db);
+            let envs: Vec<Value> = env_rows
+                .iter()
+                .map(|env| {
+                    let servers = db_envs::get_server_ids(db, &env.id).unwrap_or_default();
+                    json!({
+                        "id": env.id,
+                        "name": env.name,
+                        "servers": servers,
+                    })
+                })
+                .collect();
+            json!(envs)
+        } else {
+            json!([])
+        }
+    }
+
+    fn build_agents_json(&self) -> Value {
+        let registry = crate::agents::AgentRegistry::load_bundled();
+        let entries: Vec<Value> = registry
+            .list_agents()
             .iter()
-            .map(|env| {
+            .map(|a| {
                 json!({
-                    "id": env.id,
-                    "name": env.name,
-                    "servers": env.servers,
+                    "id": a.id,
+                    "name": a.name,
+                    "tier": a.tier,
                 })
             })
             .collect();
-        json!(envs)
+        json!(entries)
+    }
+
+    fn build_logs_json(&self) -> Value {
+        if let Some(ref db) = self.db {
+            match crate::db::logs::read_recent_logs(db, 20) {
+                Ok(entries) => {
+                    let simplified: Vec<Value> = entries
+                        .iter()
+                        .map(|e| {
+                            let mut obj = json!({
+                                "method": e.method,
+                                "env_id": e.env_id,
+                                "duration_ms": e.duration_ms,
+                                "timestamp": e.timestamp,
+                            });
+                            if let Some(ref err) = e.error {
+                                obj["error"] = json!(err);
+                            }
+                            if let Some(ref info) = e.agent_info
+                                && let Some(ref agent_id) = info.agent_id
+                            {
+                                obj["agent"] = json!(agent_id);
+                            }
+                            obj
+                        })
+                        .collect();
+                    json!(simplified)
+                }
+                Err(_) => json!([]),
+            }
+        } else {
+            json!([])
+        }
     }
 }
 
@@ -311,7 +382,7 @@ fn wrap_content(text: &str) -> Value {
 
 /// Wrap resource output in the MCP ReadResourceResult format.
 fn wrap_resource(uri: &str, text: &str) -> Value {
-    json!({"contents": [{"uri": uri, "text": text}]})
+    json!({"contents": [{"uri": uri, "mimeType": "application/json", "text": text}]})
 }
 
 /// Extract a required string field from tool arguments.
@@ -329,7 +400,8 @@ fn require_str(args: &Value, field: &str) -> Result<String, ProxyError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, Environment, PermissionLevel, Permissions};
+    use crate::config::{Config, PermissionLevel, Permissions};
+    use crate::db::Db;
 
     fn config_with_permission(enable: PermissionLevel, disable: PermissionLevel) -> Config {
         Config {
@@ -338,18 +410,27 @@ mod tests {
                 enable_server: enable,
                 disable_server: disable,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec!["filesystem".to_string()],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         }
     }
 
     fn make_layer(config: Config) -> PlugmuxLayer {
+        let db = Db::open_in_memory().unwrap();
+        // Pre-populate global env with "filesystem" server for tests that expect it
+        db_envs::add_server(&db, "global", "filesystem").unwrap();
         PlugmuxLayer::new(
             Arc::new(RwLock::new(config)),
             Arc::new(ServerManager::new()),
+            Some(db),
+        )
+    }
+
+    fn make_layer_with_db(config: Config, db: Arc<Db>) -> PlugmuxLayer {
+        PlugmuxLayer::new(
+            Arc::new(RwLock::new(config)),
+            Arc::new(ServerManager::new()),
+            Some(db),
         )
     }
 
@@ -364,7 +445,7 @@ mod tests {
             PermissionLevel::Allow,
         ));
         let tools = layer.list_tools();
-        assert_eq!(tools.len(), 6);
+        assert_eq!(tools.len(), 4);
     }
 
     #[test]
@@ -392,50 +473,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_call_tool_list_servers() {
+    async fn test_call_tool_add_environment() {
         let layer = make_layer(config_with_permission(
             PermissionLevel::Allow,
             PermissionLevel::Allow,
         ));
-        let result = layer.call_tool("plugmux__list_servers", json!({})).await;
-        assert!(result.is_ok());
-        let val = result.unwrap();
-        assert!(val["content"][0]["text"].is_string());
-    }
-
-    #[tokio::test]
-    async fn test_call_tool_list_environments() {
-        let layer = make_layer(config_with_permission(
-            PermissionLevel::Allow,
-            PermissionLevel::Allow,
-        ));
-        let result = layer
-            .call_tool("plugmux__list_environments", json!({}))
-            .await;
-        assert!(result.is_ok());
-        let val = result.unwrap();
-        let text = val["content"][0]["text"].as_str().unwrap();
-        // Should contain our "global" environment
-        assert!(text.contains("global"));
-    }
-
-    #[tokio::test]
-    async fn test_call_tool_server_status() {
-        let layer = make_layer(config_with_permission(
-            PermissionLevel::Allow,
-            PermissionLevel::Allow,
-        ));
-        // Server doesn't exist in manager, so health is "not_found"
         let result = layer
             .call_tool(
-                "plugmux__server_status",
-                json!({"server_id": "nonexistent"}),
+                "plugmux__add_environment",
+                json!({"name": "Work", "servers": ["figma", "github"]}),
             )
             .await;
         assert!(result.is_ok());
         let val = result.unwrap();
         let text = val["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("not_found"));
+        assert!(text.contains("Work"));
+        assert!(text.contains("figma"));
+
+        // Verify it was added to db
+        let db = layer.db.as_ref().unwrap();
+        let servers = db_envs::get_server_ids(db, "work").unwrap();
+        assert!(servers.contains(&"figma".to_string()));
+        assert!(servers.contains(&"github".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_call_tool_add_environment_no_servers() {
+        let layer = make_layer(config_with_permission(
+            PermissionLevel::Allow,
+            PermissionLevel::Allow,
+        ));
+        let result = layer
+            .call_tool("plugmux__add_environment", json!({"name": "Personal"}))
+            .await;
+        assert!(result.is_ok());
+        let val = result.unwrap();
+        let text = val["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Personal"));
+        assert!(text.contains("add servers later"));
+    }
+
+    #[tokio::test]
+    async fn test_call_tool_add_environment_missing_name() {
+        let layer = make_layer(config_with_permission(
+            PermissionLevel::Allow,
+            PermissionLevel::Allow,
+        ));
+        let result = layer.call_tool("plugmux__add_environment", json!({})).await;
+        assert!(matches!(result, Err(ProxyError::ToolCallFailed(_))));
     }
 
     #[tokio::test]
@@ -460,13 +545,11 @@ mod tests {
                 enable_server: PermissionLevel::Allow,
                 disable_server: PermissionLevel::Allow,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec![],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        let layer = make_layer_with_db(config, db);
 
         let result = layer
             .call_tool(
@@ -476,9 +559,9 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // Verify server was added to config
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        // Verify server was added to db
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(ids.contains(&"new-srv".to_string()));
     }
 
@@ -490,13 +573,13 @@ mod tests {
                 enable_server: PermissionLevel::Allow,
                 disable_server: PermissionLevel::Allow,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec!["filesystem".to_string(), "github".to_string()],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        db_envs::add_server(&db, "global", "filesystem").unwrap();
+        db_envs::add_server(&db, "global", "github").unwrap();
+        let layer = make_layer_with_db(config, db);
 
         let result = layer
             .call_tool(
@@ -506,8 +589,8 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(!ids.contains(&"filesystem".to_string()));
         assert!(ids.contains(&"github".to_string()));
     }
@@ -572,13 +655,11 @@ mod tests {
                 enable_server: PermissionLevel::Approve,
                 disable_server: PermissionLevel::Approve,
             },
-            environments: vec![Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: vec![],
-            }],
+            device_id: "test-device".to_string(),
+            onboarding_shown: false,
         };
-        let layer = make_layer(config);
+        let db = Db::open_in_memory().unwrap();
+        let layer = make_layer_with_db(config, db);
 
         // Trigger approval
         let err = layer
@@ -599,9 +680,9 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // Verify server was added
-        let cfg = layer.config.read().await;
-        let ids = environment::get_server_ids(&cfg, "global").unwrap();
+        // Verify server was added to db
+        let db = layer.db.as_ref().unwrap();
+        let ids = db_envs::get_server_ids(db, "global").unwrap();
         assert!(ids.contains(&"new-srv".to_string()));
     }
 
@@ -640,7 +721,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_read_resource_agents_returns_empty() {
+    async fn test_read_resource_agents() {
         let layer = make_layer(config_with_permission(
             PermissionLevel::Allow,
             PermissionLevel::Allow,
@@ -648,7 +729,7 @@ mod tests {
         let result = layer.read_resource("plugmux://agents").await;
         assert!(result.is_ok());
         let val = result.unwrap();
-        assert_eq!(val["contents"][0]["text"].as_str().unwrap(), "[]");
+        assert!(val["contents"][0]["text"].as_str().is_some());
     }
 
     #[tokio::test]

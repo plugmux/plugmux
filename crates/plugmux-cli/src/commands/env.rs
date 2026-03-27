@@ -2,7 +2,8 @@ use clap::Subcommand;
 
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config;
-use plugmux_core::environment;
+use plugmux_core::db::Db;
+use plugmux_core::db::environments as db_env;
 use plugmux_core::slug::slugify;
 
 #[derive(Subcommand)]
@@ -25,18 +26,19 @@ pub enum EnvCommands {
 }
 
 pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
-    let cfg_path = config::config_path();
-    let mut cfg = config::load_or_default(&cfg_path);
+    let db = Db::open(&Db::default_path()).map_err(|e| format!("failed to open database: {e}"))?;
+    let cfg = config::load_or_default(&config::config_path());
 
     match cmd {
         EnvCommands::List => {
-            if cfg.environments.is_empty() {
+            let envs = db_env::list_environments(&db);
+            if envs.is_empty() {
                 println!("No environments configured.");
                 println!("Run `plugmux env create <name>` to get started.");
             } else {
                 println!("Environments:");
-                for env in &cfg.environments {
-                    let server_count = environment::get_server_ids(&cfg, &env.id)
+                for env in &envs {
+                    let server_count = db_env::get_server_ids(&db, &env.id)
                         .map(|s| s.len())
                         .unwrap_or(0);
                     println!(
@@ -51,7 +53,8 @@ pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
             let id = slugify(name);
 
             // Check for duplicates
-            if cfg.environments.iter().any(|e| e.id == id) {
+            let existing = db_env::list_environments(&db);
+            if existing.iter().any(|e| e.id == id) {
                 return Err(format!("environment '{id}' already exists").into());
             }
 
@@ -66,17 +69,18 @@ pub fn run(cmd: &EnvCommands) -> Result<(), Box<dyn std::error::Error>> {
                 Vec::new()
             };
 
-            let env = config::add_environment(&mut cfg, name);
-            env.servers = preset_servers;
+            db_env::add_environment(&db, &id, name)?;
 
-            config::save(&cfg_path, &cfg)?;
+            for server_id in &preset_servers {
+                db_env::add_server(&db, &id, server_id)?;
+            }
+
             println!("Created environment: {} ({})", name, id);
             println!("  Endpoint: http://localhost:{}/env/{id}", cfg.port);
         }
 
         EnvCommands::Delete { id } => {
-            config::remove_environment(&mut cfg, id)?;
-            config::save(&cfg_path, &cfg)?;
+            db_env::remove_environment(&db, id)?;
             println!("Deleted environment: {id}");
         }
     }

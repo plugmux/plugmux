@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v2/crates/tauri-cli/schema.json",
   "productName": "plugmux",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "identifier": "com.plugmux.app",
   "build": {
     "frontendDist": "../dist",
@@ -18,7 +18,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": "v1Compatible",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -32,7 +32,7 @@
       "endpoints": [
         "https://github.com/plugmux/plugmux/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEMEMEN0I0NUVFNjlDREUKUldUZW5PWmV0TmNNUFFNVUk2ZGRrYkRBZlZNUFI4QkJpcTRWU2dYTnR6WFNtSS9ueW9XdDZVOVYK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJBRjYyMERFOTQ5ODI3QzgKUldUSUo1aVUzaUQyS2d0MURJSmlQaFVwMHJSaDdQaDlwRld3dEczU0JFQkdoem9yNXdCYzVia0UK"
     }
   }
 }

@@ -41,7 +41,7 @@ const PER_PAGE = 12;
 
 export function CatalogPage() {
   const { servers, loading } = useCatalog();
-  const { config, addServerToEnv } = useConfig();
+  const { environments, addServerToEnv } = useConfig();
 
   const [tab, setTab] = useState("discover");
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,7 +58,6 @@ export function CatalogPage() {
     }
   });
 
-  const environments = config?.environments ?? [];
 
   // Persist bookmarks
   useEffect(() => {

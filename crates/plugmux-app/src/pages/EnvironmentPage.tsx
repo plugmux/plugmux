@@ -17,7 +17,7 @@ interface EnvironmentPageProps {
 }
 
 export function EnvironmentPage({ envId, onNavigate }: EnvironmentPageProps) {
-  const { config, renameEnvironment, removeServerFromEnv, addServerToEnv, deleteEnvironment } = useConfig();
+  const { config, environments, renameEnvironment, removeServerFromEnv, addServerToEnv, deleteEnvironment } = useConfig();
   const { servers: catalogServers } = useCatalog();
   const { servers: customServers, addServer: addCustomServer } = useCustomServers();
 
@@ -26,7 +26,7 @@ export function EnvironmentPage({ envId, onNavigate }: EnvironmentPageProps) {
   const [copied, setCopied] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  const env = config?.environments.find((e) => e.id === envId);
+  const env = environments.find((e) => e.id === envId);
   const port = config?.port ?? 4242;
   const envUrl = `http://localhost:${port}/env/${envId}`;
 

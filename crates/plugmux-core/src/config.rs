@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::slug::slugify;
-
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -15,10 +13,8 @@ pub enum ConfigError {
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("Environment not found: {0}")]
+    #[error("Not found: {0}")]
     EnvironmentNotFound(String),
-    #[error("Cannot delete the global environment")]
-    CannotDeleteGlobal,
     #[error("ID collision: {0}")]
     IdCollision(String),
 }
@@ -35,13 +31,20 @@ fn default_approve() -> PermissionLevel {
     PermissionLevel::Approve
 }
 
+fn default_device_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_port")]
     pub port: u16,
     #[serde(default)]
     pub permissions: Permissions,
-    pub environments: Vec<Environment>,
+    #[serde(default = "default_device_id")]
+    pub device_id: String,
+    #[serde(default)]
+    pub onboarding_shown: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,14 +70,6 @@ pub enum PermissionLevel {
     Allow,
     Approve,
     Disable,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Environment {
-    pub id: String,
-    pub name: String,
-    /// Server IDs — referencing catalog or custom servers.
-    pub servers: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -106,53 +101,23 @@ pub fn config_path() -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap
-// ---------------------------------------------------------------------------
-
-/// Ensures a "global" environment exists in `config`. Adds one if missing.
-/// Migrates legacy "default" environment to "global" if found.
-pub fn ensure_global(config: &mut Config) {
-    // Migrate legacy "default" to "global"
-    if let Some(env) = config.environments.iter_mut().find(|e| e.id == "default") {
-        env.id = "global".to_string();
-        env.name = "Global".to_string();
-    }
-    // Ensure global exists
-    if !config.environments.iter().any(|e| e.id == "global") {
-        config.environments.insert(
-            0,
-            Environment {
-                id: "global".to_string(),
-                name: "Global".to_string(),
-                servers: Vec::new(),
-            },
-        );
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Load / Save
 // ---------------------------------------------------------------------------
 
-/// Loads config from `path`, ensuring a global environment exists.
+/// Loads config from `path`.
 pub fn load(path: &Path) -> Result<Config, ConfigError> {
     let content = std::fs::read_to_string(path)?;
-    let mut config: Config = serde_json::from_str(&content)?;
-    ensure_global(&mut config);
+    let config: Config = serde_json::from_str(&content)?;
     Ok(config)
 }
 
-/// Loads config from `path`, or returns a fresh config with an empty global
-/// environment if the file does not exist.
+/// Loads config from `path`, or returns a fresh default config if the file
+/// does not exist or cannot be parsed.
 pub fn load_or_default(path: &Path) -> Config {
     match std::fs::read_to_string(path) {
-        Ok(content) => match serde_json::from_str::<Config>(&content) {
-            Ok(mut config) => {
-                ensure_global(&mut config);
-                config
-            }
-            Err(_) => default_config(),
-        },
+        Ok(content) => {
+            serde_json::from_str::<Config>(&content).unwrap_or_else(|_| default_config())
+        }
         Err(_) => default_config(),
     }
 }
@@ -171,54 +136,9 @@ fn default_config() -> Config {
     Config {
         port: default_port(),
         permissions: Permissions::default(),
-        environments: vec![Environment {
-            id: "global".to_string(),
-            name: "Global".to_string(),
-            servers: Vec::new(),
-        }],
+        device_id: default_device_id(),
+        onboarding_shown: false,
     }
-}
-
-// ---------------------------------------------------------------------------
-// Environment management
-// ---------------------------------------------------------------------------
-
-/// Adds a new environment to `config` with a slug ID derived from `name`.
-/// Returns a mutable reference to the new environment.
-pub fn add_environment<'a>(config: &'a mut Config, name: &str) -> &'a mut Environment {
-    let id = slugify(name);
-    let env = Environment {
-        id,
-        name: name.to_string(),
-        servers: Vec::new(),
-    };
-    config.environments.push(env);
-    config.environments.last_mut().unwrap()
-}
-
-/// Finds an environment by id, returning an immutable reference.
-pub fn find_environment<'a>(config: &'a Config, id: &str) -> Option<&'a Environment> {
-    config.environments.iter().find(|e| e.id == id)
-}
-
-/// Finds an environment by id, returning a mutable reference.
-pub fn find_environment_mut<'a>(config: &'a mut Config, id: &str) -> Option<&'a mut Environment> {
-    config.environments.iter_mut().find(|e| e.id == id)
-}
-
-/// Removes an environment by id.
-/// Returns `Err(CannotDeleteGlobal)` if `id == "global"`.
-/// Returns `Err(EnvironmentNotFound)` if the id does not exist.
-pub fn remove_environment(config: &mut Config, id: &str) -> Result<(), ConfigError> {
-    if id == "global" {
-        return Err(ConfigError::CannotDeleteGlobal);
-    }
-    let before = config.environments.len();
-    config.environments.retain(|e| e.id != id);
-    if config.environments.len() == before {
-        return Err(ConfigError::EnvironmentNotFound(id.to_string()));
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +165,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Load with port, permissions, string server IDs
+    // Load with port, permissions
     // -----------------------------------------------------------------------
 
     #[test]
@@ -257,13 +177,7 @@ mod tests {
                 "enable_server": "allow",
                 "disable_server": "approve"
             },
-            "environments": [
-                {
-                    "id": "global",
-                    "name": "Global",
-                    "servers": ["filesystem", "github"]
-                }
-            ]
+            "device_id": "test-device-123"
         }
         "#;
 
@@ -276,8 +190,8 @@ mod tests {
         assert_eq!(cfg.port, 4000);
         assert_eq!(cfg.permissions.enable_server, PermissionLevel::Allow);
         assert_eq!(cfg.permissions.disable_server, PermissionLevel::Approve);
-        assert_eq!(cfg.environments.len(), 1);
-        assert_eq!(cfg.environments[0].servers, vec!["filesystem", "github"]);
+        assert_eq!(cfg.device_id, "test-device-123");
+        assert!(!cfg.onboarding_shown);
     }
 
     // -----------------------------------------------------------------------
@@ -291,140 +205,26 @@ mod tests {
 
         let mut cfg = default_config();
         cfg.port = 8080;
-        find_environment_mut(&mut cfg, "global")
-            .unwrap()
-            .servers
-            .push("my-server".to_string());
 
         save(&path, &cfg).unwrap();
 
         let loaded = load(&path).unwrap();
         assert_eq!(loaded.port, 8080);
-        assert_eq!(loaded.environments[0].servers, vec!["my-server"]);
+        assert_eq!(loaded.device_id, cfg.device_id);
     }
 
     // -----------------------------------------------------------------------
-    // Global environment bootstrap (missing global gets auto-created)
+    // load_or_default
     // -----------------------------------------------------------------------
 
     #[test]
-    fn test_ensure_global_creates_missing_global() {
-        let json = r#"
-        {
-            "port": 4242,
-            "environments": [
-                {
-                    "id": "work",
-                    "name": "Work",
-                    "servers": []
-                }
-            ]
-        }
-        "#;
-
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.json");
-        std::fs::write(&path, json).unwrap();
-
-        let cfg = load(&path).unwrap();
-
-        // global env should have been injected
-        let global_env = find_environment(&cfg, "global");
-        assert!(
-            global_env.is_some(),
-            "global environment should be auto-created"
-        );
-        assert_eq!(global_env.unwrap().name, "Global");
-    }
-
-    #[test]
-    fn test_load_or_default_creates_global_env_when_file_missing() {
+    fn test_load_or_default_returns_default_when_file_missing() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("nonexistent.json");
 
         let cfg = load_or_default(&path);
-        assert!(find_environment(&cfg, "global").is_some());
         assert_eq!(cfg.port, 4242);
-    }
-
-    // -----------------------------------------------------------------------
-    // delete_environment("global") returns error
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_delete_global_environment_returns_error() {
-        let mut cfg = default_config();
-        let result = remove_environment(&mut cfg, "global");
-        assert!(
-            matches!(result, Err(ConfigError::CannotDeleteGlobal)),
-            "expected CannotDeleteGlobal error"
-        );
-        // environment was not removed
-        assert!(find_environment(&cfg, "global").is_some());
-    }
-
-    // -----------------------------------------------------------------------
-    // add_environment creates slug ID
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_add_environment_creates_slug_id() {
-        let mut cfg = default_config();
-        let env = add_environment(&mut cfg, "My Work Project");
-
-        assert_eq!(env.id, "my-work-project");
-        assert_eq!(env.name, "My Work Project");
-        assert!(env.servers.is_empty());
-    }
-
-    #[test]
-    fn test_add_environment_no_endpoint() {
-        // New model has no endpoint field — ensure it serializes cleanly
-        let mut cfg = default_config();
-        add_environment(&mut cfg, "Personal");
-        let serialized = serde_json::to_string(&cfg).unwrap();
-        assert!(
-            !serialized.contains("endpoint"),
-            "Environment must not have an endpoint field"
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // find_environment_mut
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_find_environment_mut() {
-        let mut cfg = default_config();
-        add_environment(&mut cfg, "Staging");
-
-        let env = find_environment_mut(&mut cfg, "staging").unwrap();
-        env.servers.push("redis".to_string());
-
-        assert_eq!(
-            find_environment(&cfg, "staging").unwrap().servers,
-            vec!["redis"]
-        );
-    }
-
-    // -----------------------------------------------------------------------
-    // remove_environment non-default
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_remove_environment_non_default() {
-        let mut cfg = default_config();
-        add_environment(&mut cfg, "Staging");
-
-        remove_environment(&mut cfg, "staging").unwrap();
-        assert!(find_environment(&cfg, "staging").is_none());
-    }
-
-    #[test]
-    fn test_remove_environment_not_found_returns_error() {
-        let mut cfg = default_config();
-        let result = remove_environment(&mut cfg, "nonexistent");
-        assert!(matches!(result, Err(ConfigError::EnvironmentNotFound(_))));
+        assert!(!cfg.device_id.is_empty());
     }
 
     // -----------------------------------------------------------------------
@@ -442,5 +242,28 @@ mod tests {
     fn test_port_defaults_to_4242() {
         let cfg = default_config();
         assert_eq!(cfg.port, 4242);
+    }
+
+    // -----------------------------------------------------------------------
+    // device_id generated on default
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_device_id_generated_on_default() {
+        let cfg = default_config();
+        assert!(!cfg.device_id.is_empty());
+        // Should be a valid UUID
+        assert!(uuid::Uuid::parse_str(&cfg.device_id).is_ok());
+    }
+
+    #[test]
+    fn test_device_id_generated_when_missing_from_json() {
+        let json = r#"{"port": 4242}"#;
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, json).unwrap();
+
+        let cfg = load(&path).unwrap();
+        assert!(!cfg.device_id.is_empty());
     }
 }

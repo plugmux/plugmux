@@ -1,8 +1,7 @@
 mod registry;
 pub use registry::*;
 
-mod state;
-pub use state::*;
+pub use crate::db::agents::{AgentSource, AgentStateEntry};
 
 mod detect;
 pub use detect::*;

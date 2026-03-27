@@ -38,7 +38,7 @@ export function StatusDot({ status, label, className }: StatusDotProps) {
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>{dot}</TooltipTrigger>
-        <TooltipContent side="right" className="text-xs">
+        <TooltipContent side="top" className="text-xs">
           {label}
         </TooltipContent>
       </Tooltip>

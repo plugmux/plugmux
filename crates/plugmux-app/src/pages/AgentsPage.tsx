@@ -3,6 +3,7 @@ import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentTable } from "@/components/agents/AgentTable";
 import { AddAgentDialog } from "@/components/agents/AddAgentDialog";
+import { InstallDialog } from "@/components/agents/InstallDialog";
 import { ManualSetupDialog } from "@/components/agents/ManualSetupDialog";
 import { useAgents } from "@/hooks/useAgents";
 import type { DetectedAgent } from "@/lib/commands";
@@ -12,6 +13,7 @@ export function AgentsPage() {
     useAgents();
 
   const [addAgentOpen, setAddAgentOpen] = useState(false);
+  const [installAgent, setInstallAgent] = useState<DetectedAgent | null>(null);
   const [manualAgent, setManualAgent] = useState<DetectedAgent | null>(null);
 
   function handleDisable(agent: DetectedAgent) {
@@ -59,13 +61,21 @@ export function AgentsPage() {
         onConnect={connect}
         onDisable={handleDisable}
         onDelete={handleDelete}
+        onInstall={setInstallAgent}
         onManualSetup={setManualAgent}
       />
 
       <AddAgentDialog
         open={addAgentOpen}
         onOpenChange={setAddAgentOpen}
-        onAdded={reload}
+      />
+
+      <InstallDialog
+        open={installAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) setInstallAgent(null);
+        }}
+        agent={installAgent}
       />
 
       <ManualSetupDialog

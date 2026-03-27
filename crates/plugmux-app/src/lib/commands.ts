@@ -7,7 +7,6 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Config {
   port: number;
   permissions: Permissions;
-  environments: Environment[];
 }
 
 export interface Permissions {
@@ -181,6 +180,9 @@ export interface DetectedAgent {
   installed: boolean;
   status: "green" | "yellow" | "gray";
   source: string;
+  tier: "auto" | "manual" | "custom";
+  install_url: string | null;
+  setup_hint: string | null;
 }
 
 // ---------------------------------------------------------------------------

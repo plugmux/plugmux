@@ -29,8 +29,13 @@ pub fn start_config_watcher(
                     return;
                 }
 
+                // Only react to config.json and custom_servers.json — ignore SQLite files
                 let changed_config = event.paths.iter().any(|p| p == &config_path);
                 let changed_custom = event.paths.iter().any(|p| p == &custom_path);
+
+                if !changed_config && !changed_custom {
+                    return;
+                }
 
                 if changed_config {
                     info!("config.json changed externally, reloading");
