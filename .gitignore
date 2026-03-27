@@ -18,3 +18,7 @@ crates/plugmux-app/src-tauri/target/
 node_modules/
 dist/
 .env
+
+# Superpowers (local-only design docs & plans)
+docs/superpowers/
+.superpowers/
