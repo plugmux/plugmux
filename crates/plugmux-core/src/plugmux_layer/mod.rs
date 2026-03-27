@@ -412,6 +412,7 @@ mod tests {
             },
             device_id: "test-device".to_string(),
             onboarding_shown: false,
+            api_url: "http://test".to_string(),
         }
     }
 
@@ -547,6 +548,7 @@ mod tests {
             },
             device_id: "test-device".to_string(),
             onboarding_shown: false,
+            api_url: "http://test".to_string(),
         };
         let db = Db::open_in_memory().unwrap();
         let layer = make_layer_with_db(config, db);
@@ -575,6 +577,7 @@ mod tests {
             },
             device_id: "test-device".to_string(),
             onboarding_shown: false,
+            api_url: "http://test".to_string(),
         };
         let db = Db::open_in_memory().unwrap();
         db_envs::add_server(&db, "global", "filesystem").unwrap();
@@ -657,6 +660,7 @@ mod tests {
             },
             device_id: "test-device".to_string(),
             onboarding_shown: false,
+            api_url: "http://test".to_string(),
         };
         let db = Db::open_in_memory().unwrap();
         let layer = make_layer_with_db(config, db);

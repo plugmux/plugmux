@@ -5,6 +5,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
+use plugmux_core::api_client::ApiClient;
 use plugmux_core::catalog::CatalogRegistry;
 use plugmux_core::config::{self, Config};
 use plugmux_core::custom_servers::CustomServerStore;
@@ -48,6 +49,8 @@ pub struct Engine {
     pub active_agents: Arc<std::sync::RwLock<HashSet<String>>>,
     /// Callback provided by the Tauri layer — set via `set_on_request`.
     on_request: Arc<RwLock<Option<OnRequest>>>,
+    /// HTTP client for the plugmux cloud API.
+    pub api_client: Arc<RwLock<ApiClient>>,
 }
 
 impl Engine {
@@ -61,6 +64,11 @@ impl Engine {
         // Load config
         let cfg = config::load_or_default(&config::config_path());
         let port = cfg.port;
+
+        // Create API client
+        let api_url = std::env::var("PLUGMUX_API_URL").unwrap_or_else(|_| cfg.api_url.clone());
+        let api_client = ApiClient::new(&api_url);
+        info!(api_url = %api_url, "API client initialized");
 
         // Load custom servers
         let custom_path = config::config_dir().join("custom_servers.json");
@@ -82,6 +90,7 @@ impl Engine {
             shutdown_tx: Arc::new(RwLock::new(None)),
             active_agents: Arc::new(std::sync::RwLock::new(HashSet::new())),
             on_request: Arc::new(RwLock::new(None)),
+            api_client: Arc::new(RwLock::new(api_client)),
         }
     }
 

@@ -49,6 +49,7 @@ async fn test_full_gateway_flow() {
         },
         device_id: String::new(),
         onboarding_shown: false,
+        api_url: "http://test".to_string(),
     };
 
     let db = Db::open_in_memory().expect("failed to open in-memory database");

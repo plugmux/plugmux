@@ -62,6 +62,16 @@ pub fn run() {
             commands::dismiss_agent,
             // Logs
             commands::get_recent_logs,
+            // Cloud API
+            commands::api_health,
+            commands::api_list_servers,
+            commands::api_get_server,
+            commands::api_list_collections,
+            commands::api_get_collection,
+            commands::api_get_auth_url,
+            commands::api_set_token,
+            commands::api_get_profile,
+            commands::api_get_base_url,
         ])
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

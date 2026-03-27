@@ -6,6 +6,10 @@ use tauri::{AppHandle, Emitter, State};
 use plugmux_core::agents::{
     AgentEntry, AgentRegistry, AgentSource, AgentStateEntry, ConfigFormat, DetectedAgent,
 };
+use plugmux_core::api_client::{
+    AuthUser, CatalogResponse, CollectionsResponse, HealthResponse, RemoteCatalogServer,
+    RemoteCollection,
+};
 use plugmux_core::catalog::{CatalogEntry, Preset};
 use plugmux_core::config::{Config, PermissionLevel, Permissions};
 use plugmux_core::db::{
@@ -570,4 +574,82 @@ pub async fn get_recent_logs(
 ) -> Result<Vec<LogEntry>, String> {
     logs::read_recent_logs(&engine.db, limit.unwrap_or(100))
         .map_err(|e| format!("failed to read logs: {e}"))
+}
+
+// ─── Cloud API commands ───
+
+#[tauri::command]
+pub async fn api_health(engine: State<'_, Arc<Engine>>) -> Result<HealthResponse, String> {
+    let client = engine.api_client.read().await;
+    client.health().await
+}
+
+#[tauri::command]
+pub async fn api_list_servers(
+    engine: State<'_, Arc<Engine>>,
+    limit: Option<u32>,
+    cursor: Option<String>,
+    search: Option<String>,
+    category: Option<String>,
+) -> Result<CatalogResponse, String> {
+    let client = engine.api_client.read().await;
+    client
+        .list_servers(
+            limit,
+            cursor.as_deref(),
+            search.as_deref(),
+            category.as_deref(),
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn api_get_server(
+    engine: State<'_, Arc<Engine>>,
+    id: String,
+) -> Result<RemoteCatalogServer, String> {
+    let client = engine.api_client.read().await;
+    client.get_server(&id).await
+}
+
+#[tauri::command]
+pub async fn api_list_collections(
+    engine: State<'_, Arc<Engine>>,
+) -> Result<CollectionsResponse, String> {
+    let client = engine.api_client.read().await;
+    client.list_collections().await
+}
+
+#[tauri::command]
+pub async fn api_get_collection(
+    engine: State<'_, Arc<Engine>>,
+    id: String,
+) -> Result<RemoteCollection, String> {
+    let client = engine.api_client.read().await;
+    client.get_collection(&id).await
+}
+
+#[tauri::command]
+pub async fn api_get_auth_url(engine: State<'_, Arc<Engine>>) -> Result<String, String> {
+    let client = engine.api_client.read().await;
+    Ok(client.github_auth_url())
+}
+
+#[tauri::command]
+pub async fn api_set_token(engine: State<'_, Arc<Engine>>, token: String) -> Result<(), String> {
+    let mut client = engine.api_client.write().await;
+    client.set_token(token);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn api_get_profile(engine: State<'_, Arc<Engine>>) -> Result<AuthUser, String> {
+    let client = engine.api_client.read().await;
+    client.get_profile().await
+}
+
+#[tauri::command]
+pub async fn api_get_base_url(engine: State<'_, Arc<Engine>>) -> Result<String, String> {
+    let client = engine.api_client.read().await;
+    Ok(client.base_url().to_string())
 }

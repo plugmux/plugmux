@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod api_client;
 pub mod catalog;
 pub mod config;
 pub mod custom_servers;

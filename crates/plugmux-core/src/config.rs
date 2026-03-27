@@ -35,6 +35,10 @@ fn default_device_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+fn default_api_url() -> String {
+    "https://plugmux-api.plugmux.workers.dev".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default = "default_port")]
@@ -45,6 +49,8 @@ pub struct Config {
     pub device_id: String,
     #[serde(default)]
     pub onboarding_shown: bool,
+    #[serde(default = "default_api_url")]
+    pub api_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +144,7 @@ fn default_config() -> Config {
         permissions: Permissions::default(),
         device_id: default_device_id(),
         onboarding_shown: false,
+        api_url: default_api_url(),
     }
 }
 
