@@ -1,3 +1,4 @@
+# plugmux workspace
 [workspace]
 resolver = "2"
 members = ["crates/plugmux-core", "crates/plugmux-cli", "crates/plugmux-app/src-tauri"]
