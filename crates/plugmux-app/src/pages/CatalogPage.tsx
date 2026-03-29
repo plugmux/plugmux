@@ -14,12 +14,6 @@ import { CatalogCard } from "@/components/catalog/CatalogCard";
 import { CatalogDetail } from "@/components/catalog/CatalogDetail";
 import { CategoryFilter } from "@/components/catalog/CategoryFilter";
 import { Pagination } from "@/components/catalog/Pagination";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { useCatalog } from "@/hooks/useCatalog";
 import { useConfig } from "@/hooks/useConfig";
 import type { RemoteCatalogServer } from "@/lib/commands";
@@ -117,6 +111,7 @@ export function CatalogPage() {
   const [sort, setSort] = useState("popular");
   const [page, setPage] = useState(1);
   const [detailEntry, setDetailEntry] = useState<CatalogEntry | null>(null);
+  const [activeCollection, setActiveCollection] = useState<string>("all");
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem("plugmux-bookmarks");
@@ -283,51 +278,69 @@ export function CatalogPage() {
                 </p>
               </div>
             ) : (
-              <Accordion type="multiple" className="space-y-2">
-                {collections.map((col) => {
-                  const colServers = servers.filter((s) =>
-                    (col.server_ids ?? []).includes(s.id)
-                  );
-                  if (colServers.length === 0) return null;
-                  return (
-                    <AccordionItem
-                      key={col.id}
-                      value={col.id}
-                      className="rounded-lg border bg-card px-4"
-                    >
-                      <AccordionTrigger className="py-3 hover:no-underline">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[15px] font-semibold">
+              <>
+                {/* Collection filter chips */}
+                <div className="mb-5 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setActiveCollection("all")}
+                    className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
+                      activeCollection === "all"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {collections
+                    .filter((col) => (col.server_ids ?? []).some((sid) => servers.some((s) => s.id === sid)))
+                    .map((col) => (
+                      <button
+                        key={col.id}
+                        onClick={() => setActiveCollection(col.id)}
+                        className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
+                          activeCollection === col.id
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        }`}
+                      >
+                        For {col.name}
+                      </button>
+                    ))}
+                </div>
+
+                {/* Sections */}
+                <div className="space-y-8">
+                  {collections
+                    .filter((col) => activeCollection === "all" || activeCollection === col.id)
+                    .map((col) => {
+                      const colServers = servers.filter((s) =>
+                        (col.server_ids ?? []).includes(s.id)
+                      );
+                      if (colServers.length === 0) return null;
+                      return (
+                        <section key={col.id}>
+                          <h2 className="mb-3 text-lg font-semibold">
                             For {col.name}
-                          </span>
-                          <Badge
-                            variant="secondary"
-                            className="h-5 px-1.5 text-[11px]"
-                          >
-                            {colServers.length}
-                          </Badge>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="pb-4 pt-1">
-                        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-                          {colServers.map((entry) => (
-                            <CatalogCard
-                              key={entry.id}
-                              entry={toCatalogEntry(entry)}
-                              installedIn={getInstalledIn(entry.id)}
-                              environments={environments}
-                              isBookmarked={bookmarks.has(entry.id)}
-                              onAdd={(envId) => handleAdd(entry.id, envId)}
-                              onToggleBookmark={() => toggleBookmark(entry.id)}
-                              onClick={() => setDetailEntry(toCatalogEntry(entry))}
-                            />
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
+                          </h2>
+                          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+                            {colServers.map((entry) => (
+                              <CatalogCard
+                                key={entry.id}
+                                entry={toCatalogEntry(entry)}
+                                installedIn={getInstalledIn(entry.id)}
+                                environments={environments}
+                                isBookmarked={bookmarks.has(entry.id)}
+                                onAdd={(envId) => handleAdd(entry.id, envId)}
+                                onToggleBookmark={() => toggleBookmark(entry.id)}
+                                onClick={() => setDetailEntry(toCatalogEntry(entry))}
+                              />
+                            ))}
+                          </div>
+                        </section>
+                      );
+                    })}
+                </div>
+              </>
             )}
           </>
         )}
