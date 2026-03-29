@@ -82,12 +82,13 @@ interface CatalogEntry {
   added?: string;
 }
 
-function toCatalogEntry(s: RemoteCatalogServer): CatalogEntry {
+function toCatalogEntry(s: RemoteCatalogServer, baseUrl: string): CatalogEntry {
+  const iconUrl = s.icon_key ? `${baseUrl}/v1/icons/${s.icon_key}` : "";
   return {
     id: s.id,
     name: s.name,
     description: s.description,
-    icon: s.icon_key ?? "",
+    icon: iconUrl,
     category: s.categories[0] ?? "",
     categories: s.categories,
     transport: s.transport,
@@ -102,7 +103,7 @@ function toCatalogEntry(s: RemoteCatalogServer): CatalogEntry {
 }
 
 export function CatalogPage() {
-  const { servers, collections, loading, error } = useCatalog();
+  const { servers, collections, apiBaseUrl, loading, error } = useCatalog();
   const { environments, addServerToEnv } = useConfig();
 
   const [tab, setTab] = useState<TabValue>(Tab.DISCOVER);
@@ -326,13 +327,13 @@ export function CatalogPage() {
                             {colServers.map((entry) => (
                               <CatalogCard
                                 key={entry.id}
-                                entry={toCatalogEntry(entry)}
+                                entry={toCatalogEntry(entry, apiBaseUrl)}
                                 installedIn={getInstalledIn(entry.id)}
                                 environments={environments}
                                 isBookmarked={bookmarks.has(entry.id)}
                                 onAdd={(envId) => handleAdd(entry.id, envId)}
                                 onToggleBookmark={() => toggleBookmark(entry.id)}
-                                onClick={() => setDetailEntry(toCatalogEntry(entry))}
+                                onClick={() => setDetailEntry(toCatalogEntry(entry, apiBaseUrl))}
                               />
                             ))}
                           </div>
@@ -355,7 +356,7 @@ export function CatalogPage() {
                   placeholder="Search servers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 pl-9"
+                  className="pl-9"
                 />
               </div>
               {tab === Tab.DISCOVER && (
@@ -404,13 +405,13 @@ export function CatalogPage() {
                 {paged.map((entry) => (
                   <CatalogCard
                     key={entry.id}
-                    entry={toCatalogEntry(entry)}
+                    entry={toCatalogEntry(entry, apiBaseUrl)}
                     installedIn={getInstalledIn(entry.id)}
                     environments={environments}
                     isBookmarked={bookmarks.has(entry.id)}
                     onAdd={(envId) => handleAdd(entry.id, envId)}
                     onToggleBookmark={() => toggleBookmark(entry.id)}
-                    onClick={() => setDetailEntry(toCatalogEntry(entry))}
+                    onClick={() => setDetailEntry(toCatalogEntry(entry, apiBaseUrl))}
                   />
                 ))}
               </div>

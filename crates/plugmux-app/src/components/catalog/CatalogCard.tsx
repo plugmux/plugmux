@@ -60,20 +60,15 @@ export function CatalogCard({
     >
       {/* Header: avatar + name + badges + bookmark */}
       <div className="flex items-start gap-3">
-        <Avatar className="h-10 w-10 shrink-0 rounded-lg">
+        <Avatar className="h-10 w-10 shrink-0">
           {entry.icon && (
-            <AvatarImage
-              src={`/v1/icons/${entry.icon}`}
-              alt={entry.name}
-              className="rounded-lg"
-            />
+            <AvatarImage src={entry.icon} alt={entry.name} />
           )}
           <AvatarFallback
-            className="rounded-lg font-mono text-[15px] font-bold"
+            className="font-mono text-[15px] font-bold"
             style={{
               color,
               background: `color-mix(in srgb, ${color} 12%, transparent)`,
-              border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
             }}
           >
             {initial}
