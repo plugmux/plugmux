@@ -9,6 +9,9 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub fn run() {
+    // Load .env file if present (for local dev — sets PLUGMUX_API_URL etc.)
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt::init();
 
     let engine = Arc::new(Engine::new());

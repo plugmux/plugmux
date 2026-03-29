@@ -21,3 +21,4 @@ notify = "7"
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
 rusqlite = { version = "0.34", features = ["bundled"] }
+dotenvy = "0.15"
