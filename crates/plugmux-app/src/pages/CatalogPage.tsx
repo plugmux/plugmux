@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, FolderOpen } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
 import { CatalogCard } from "@/components/catalog/CatalogCard";
 import { CatalogDetail } from "@/components/catalog/CatalogDetail";
 import { CategoryFilter } from "@/components/catalog/CategoryFilter";
 import { Pagination } from "@/components/catalog/Pagination";
 import { useCatalog } from "@/hooks/useCatalog";
 import { useConfig } from "@/hooks/useConfig";
-import type { RemoteCatalogServer, RemoteCollection } from "@/lib/commands";
+import type { RemoteCatalogServer } from "@/lib/commands";
 
 const CATEGORIES = [
   { id: "developer-tools", label: "Development" },
@@ -112,7 +111,6 @@ export function CatalogPage() {
   const [sort, setSort] = useState("popular");
   const [page, setPage] = useState(1);
   const [detailEntry, setDetailEntry] = useState<CatalogEntry | null>(null);
-  const [selectedCollection, setSelectedCollection] = useState<RemoteCollection | null>(null);
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem("plugmux-bookmarks");
@@ -130,7 +128,7 @@ export function CatalogPage() {
   // Reset page on filter change
   useEffect(() => {
     setPage(1);
-  }, [tab, searchQuery, selectedCategories, sort, selectedCollection]);
+  }, [tab, searchQuery, selectedCategories, sort]);
 
   function toggleBookmark(id: string) {
     setBookmarks((prev) => {
@@ -172,12 +170,6 @@ export function CatalogPage() {
       if (tab === Tab.BOOKMARKS && !bookmarks.has(s.id)) return false;
       if (tab === Tab.INSTALLED && getInstalledIn(s.id).length === 0) return false;
 
-      // Collections tab — show servers from selected collection
-      if (tab === Tab.COLLECTIONS && selectedCollection) {
-        const ids = selectedCollection.server_ids ?? [];
-        if (!ids.includes(s.id)) return false;
-      }
-
       // Category filter
       if (selectedCategories.length > 0) {
         if (!s.categories.some((c) => selectedCategories.includes(c))) return false;
@@ -206,7 +198,7 @@ export function CatalogPage() {
     }
 
     return result;
-  }, [servers, tab, searchQuery, selectedCategories, sort, bookmarks, selectedCollection]);
+  }, [servers, tab, searchQuery, selectedCategories, sort, bookmarks]);
 
   const total = filtered.length;
   const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -274,58 +266,55 @@ export function CatalogPage() {
           </TabsList>
         </Tabs>
 
-        {/* Collections grid */}
-        {tab === Tab.COLLECTIONS && !selectedCollection && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {collections.map((col) => (
-              <Card
-                key={col.id}
-                className="cursor-pointer p-4 transition-colors hover:bg-accent/50"
-                onClick={() => setSelectedCollection(col)}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FolderOpen className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold">{col.name}</h3>
-                    <p className="mt-0.5 text-sm text-muted-foreground line-clamp-2">
-                      {col.description}
-                    </p>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {(col.server_ids ?? []).length} servers
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-            {collections.length === 0 && (
-              <div className="col-span-full py-16 text-center">
+        {/* Collections — sections with titles + same cards */}
+        {tab === Tab.COLLECTIONS && (
+          <>
+            {collections.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-16">
                 <p className="text-lg font-medium text-muted-foreground">No collections yet</p>
                 <p className="text-sm text-muted-foreground/60">
                   Collections will appear when the API is connected
                 </p>
               </div>
+            ) : (
+              <div className="space-y-8">
+                {collections.map((col) => {
+                  const colServers = servers.filter((s) =>
+                    (col.server_ids ?? []).includes(s.id)
+                  );
+                  if (colServers.length === 0) return null;
+                  return (
+                    <section key={col.id}>
+                      <h2 className="mb-1 text-lg font-semibold">
+                        For {col.name}
+                      </h2>
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        {col.description}
+                      </p>
+                      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+                        {colServers.map((entry) => (
+                          <CatalogCard
+                            key={entry.id}
+                            entry={toCatalogEntry(entry)}
+                            installedIn={getInstalledIn(entry.id)}
+                            environments={environments}
+                            isBookmarked={bookmarks.has(entry.id)}
+                            onAdd={(envId) => handleAdd(entry.id, envId)}
+                            onToggleBookmark={() => toggleBookmark(entry.id)}
+                            onClick={() => setDetailEntry(toCatalogEntry(entry))}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
             )}
-          </div>
+          </>
         )}
 
-        {/* Collection detail — back button + filtered servers */}
-        {tab === Tab.COLLECTIONS && selectedCollection && (
-          <div className="mb-4">
-            <button
-              onClick={() => setSelectedCollection(null)}
-              className="mb-3 text-sm text-muted-foreground hover:text-foreground"
-            >
-              ← Back to collections
-            </button>
-            <h2 className="text-lg font-semibold">{selectedCollection.name}</h2>
-            <p className="text-sm text-muted-foreground">{selectedCollection.description}</p>
-          </div>
-        )}
-
-        {/* Filter bar (Discover + Collection detail) */}
-        {(tab === Tab.DISCOVER || (tab === Tab.COLLECTIONS && selectedCollection)) && (
+        {/* Server list — Discover, Bookmarks, Installed */}
+        {tab !== Tab.COLLECTIONS && (
           <>
             <div className="mb-5 flex flex-wrap items-center gap-2.5">
               <div className="relative min-w-[200px] flex-1">
