@@ -54,7 +54,7 @@ export function CatalogCard({
 
   return (
     <div
-      className="group flex cursor-pointer flex-col gap-3 rounded-xl border p-5 transition-all hover:-translate-y-px hover:border-border/80 hover:shadow-lg"
+      className="group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-5 transition-colors hover:border-primary/40"
       onClick={onClick}
     >
       {/* Header: icon + name + badges + bookmark */}
