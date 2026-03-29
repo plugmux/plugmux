@@ -40,16 +40,29 @@ const CATEGORIES = [
 
 const PER_PAGE = 12;
 
-function emptyTitle(tab: string): string {
-  if (tab === "bookmarks") return "No bookmarked servers yet";
-  if (tab === "installed") return "No installed servers";
-  return "No servers match your filters";
+const Tab = {
+  DISCOVER: "discover",
+  COLLECTIONS: "collections",
+  BOOKMARKS: "bookmarks",
+  INSTALLED: "installed",
+} as const;
+
+type TabValue = (typeof Tab)[keyof typeof Tab];
+
+function emptyTitle(tab: TabValue): string {
+  switch (tab) {
+    case Tab.BOOKMARKS: return "No bookmarked servers yet";
+    case Tab.INSTALLED: return "No installed servers";
+    default: return "No servers match your filters";
+  }
 }
 
-function emptySubtitle(tab: string): string {
-  if (tab === "bookmarks") return "Bookmark servers from the Discover tab to save them here";
-  if (tab === "installed") return "Add servers to an environment to see them here";
-  return "Try adjusting your search or category filters";
+function emptySubtitle(tab: TabValue): string {
+  switch (tab) {
+    case Tab.BOOKMARKS: return "Bookmark servers from the Discover tab to save them here";
+    case Tab.INSTALLED: return "Add servers to an environment to see them here";
+    default: return "Try adjusting your search or category filters";
+  }
 }
 
 /** Shape expected by CatalogCard/CatalogDetail (legacy) */
@@ -93,7 +106,7 @@ export function CatalogPage() {
   const { servers, collections, loading, error } = useCatalog();
   const { environments, addServerToEnv } = useConfig();
 
-  const [tab, setTab] = useState<string>("discover");
+  const [tab, setTab] = useState<TabValue>(Tab.DISCOVER);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sort, setSort] = useState("popular");
@@ -156,11 +169,11 @@ export function CatalogPage() {
 
     let result = servers.filter((s) => {
       // Tab filter
-      if (tab === "bookmarks" && !bookmarks.has(s.id)) return false;
-      if (tab === "installed" && getInstalledIn(s.id).length === 0) return false;
+      if (tab === Tab.BOOKMARKS && !bookmarks.has(s.id)) return false;
+      if (tab === Tab.INSTALLED && getInstalledIn(s.id).length === 0) return false;
 
       // Collections tab — show servers from selected collection
-      if (tab === "collections" && selectedCollection) {
+      if (tab === Tab.COLLECTIONS && selectedCollection) {
         const ids = selectedCollection.server_ids ?? [];
         if (!ids.includes(s.id)) return false;
       }
@@ -231,10 +244,10 @@ export function CatalogPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={tab} onValueChange={setTab} className="mb-5">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as TabValue)} className="mb-5">
           <TabsList>
-            <TabsTrigger value="discover">Discover</TabsTrigger>
-            <TabsTrigger value="collections" className="gap-1.5">
+            <TabsTrigger value={Tab.DISCOVER}>Discover</TabsTrigger>
+            <TabsTrigger value={Tab.COLLECTIONS} className="gap-1.5">
               Collections
               {collections.length > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[11px]">
@@ -242,7 +255,7 @@ export function CatalogPage() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="bookmarks" className="gap-1.5">
+            <TabsTrigger value={Tab.BOOKMARKS} className="gap-1.5">
               Bookmarked
               {bookmarkCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[11px]">
@@ -250,7 +263,7 @@ export function CatalogPage() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="installed" className="gap-1.5">
+            <TabsTrigger value={Tab.INSTALLED} className="gap-1.5">
               Installed
               {installedCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[11px]">
@@ -262,7 +275,7 @@ export function CatalogPage() {
         </Tabs>
 
         {/* Collections grid */}
-        {tab === "collections" && !selectedCollection && (
+        {tab === Tab.COLLECTIONS && !selectedCollection && (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {collections.map((col) => (
               <Card
@@ -298,7 +311,7 @@ export function CatalogPage() {
         )}
 
         {/* Collection detail — back button + filtered servers */}
-        {tab === "collections" && selectedCollection && (
+        {tab === Tab.COLLECTIONS && selectedCollection && (
           <div className="mb-4">
             <button
               onClick={() => setSelectedCollection(null)}
@@ -312,7 +325,7 @@ export function CatalogPage() {
         )}
 
         {/* Filter bar (Discover + Collection detail) */}
-        {(tab === "discover" || (tab === "collections" && selectedCollection)) && (
+        {(tab === Tab.DISCOVER || (tab === Tab.COLLECTIONS && selectedCollection)) && (
           <>
             <div className="mb-5 flex flex-wrap items-center gap-2.5">
               <div className="relative min-w-[200px] flex-1">
@@ -324,7 +337,7 @@ export function CatalogPage() {
                   className="pl-9"
                 />
               </div>
-              {tab === "discover" && (
+              {tab === Tab.DISCOVER && (
                 <CategoryFilter
                   categories={availableCategories}
                   selected={selectedCategories}
@@ -339,7 +352,7 @@ export function CatalogPage() {
                 <span className="font-mono text-sm text-muted-foreground">
                   {total} server{total !== 1 ? "s" : ""}
                 </span>
-                {tab === "discover" && (
+                {tab === Tab.DISCOVER && (
                   <Select value={sort} onValueChange={setSort}>
                     <SelectTrigger className="h-8 w-[150px]">
                       <SelectValue />
