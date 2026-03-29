@@ -1,6 +1,11 @@
-import { Bookmark, Check, Download, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Bookmark, BadgeCheck, Check, Download, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,12 +76,16 @@ export function CatalogCard({
               {entry.name}
             </span>
             {entry.official && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-semibold text-primary"
-              >
-                Official
-              </Badge>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <BadgeCheck className="h-4 w-4 shrink-0 text-green-500" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p>Official</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
         </div>

@@ -1,4 +1,10 @@
-import { Check, Plus, X } from "lucide-react";
+import { BadgeCheck, Check, Plus, X } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -67,12 +73,16 @@ export function CatalogDetail({
               <DialogTitle className="flex items-center gap-2">
                 {entry.name}
                 {entry.official && (
-                  <Badge
-                    variant="outline"
-                    className="gap-1 border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] font-semibold text-primary"
-                  >
-                    Official
-                  </Badge>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <BadgeCheck className="h-4 w-4 shrink-0 text-green-500" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p>Official</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </DialogTitle>
               <DialogDescription className="mt-1.5 flex flex-wrap gap-1.5">
