@@ -40,6 +40,18 @@ const CATEGORIES = [
 
 const PER_PAGE = 12;
 
+function emptyTitle(tab: string): string {
+  if (tab === "bookmarks") return "No bookmarked servers yet";
+  if (tab === "installed") return "No installed servers";
+  return "No servers match your filters";
+}
+
+function emptySubtitle(tab: string): string {
+  if (tab === "bookmarks") return "Bookmark servers from the Discover tab to save them here";
+  if (tab === "installed") return "Add servers to an environment to see them here";
+  return "Try adjusting your search or category filters";
+}
+
 /** Shape expected by CatalogCard/CatalogDetail (legacy) */
 interface CatalogEntry {
   id: string;
@@ -347,10 +359,10 @@ export function CatalogPage() {
             {paged.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-16">
                 <p className="text-lg font-medium text-muted-foreground">
-                  No servers match your filters
+                  {emptyTitle(tab)}
                 </p>
                 <p className="text-sm text-muted-foreground/60">
-                  Try adjusting your search or category filters
+                  {emptySubtitle(tab)}
                 </p>
               </div>
             ) : (
