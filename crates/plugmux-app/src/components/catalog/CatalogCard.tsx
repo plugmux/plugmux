@@ -1,4 +1,4 @@
-import { Bookmark, BadgeCheck, Check, Download, Plus } from "lucide-react";
+import { Bookmark, BadgeCheck, Check, Plus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,11 +33,6 @@ function colorForId(id: string): string {
   }
   const hue = Math.abs(hash) % 360;
   return `hsl(${hue}, 60%, 55%)`;
-}
-
-function fmtInstalls(n: number): string {
-  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
-  return n.toString();
 }
 
 export function CatalogCard({
@@ -101,12 +96,7 @@ export function CatalogCard({
             e.stopPropagation();
             onToggleBookmark();
           }}
-          className={cn(
-            "shrink-0 p-1 transition-opacity",
-            isBookmarked
-              ? "opacity-100"
-              : "opacity-0 group-hover:opacity-50 hover:!opacity-100",
-          )}
+          className="shrink-0 p-1"
           title={isBookmarked ? "Remove bookmark" : "Bookmark"}
         >
           <Bookmark
@@ -114,7 +104,7 @@ export function CatalogCard({
               "h-4 w-4",
               isBookmarked
                 ? "fill-amber-500 text-amber-500"
-                : "text-muted-foreground",
+                : "text-muted-foreground/30 hover:text-muted-foreground/60",
             )}
           />
         </button>
@@ -125,46 +115,38 @@ export function CatalogCard({
         {entry.description}
       </p>
 
-      {/* Category tags */}
-      <div className="flex flex-wrap gap-1.5">
-        {(Array.isArray(entry.categories) ? entry.categories : [entry.category])
-          .filter(Boolean)
-          .map((cat) => (
-            <span
-              key={cat}
-              className="rounded-[5px] border border-muted-foreground/15 bg-muted-foreground/8 px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-            >
-              {cat}
-            </span>
-          ))}
-      </div>
+      {/* Footer: tags + action */}
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+        <div className="flex min-w-0 flex-wrap gap-1">
+          {(Array.isArray(entry.categories) ? entry.categories : [entry.category])
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((cat) => (
+              <span
+                key={cat}
+                className="truncate rounded-[5px] border border-muted-foreground/15 bg-muted-foreground/8 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+              >
+                {cat.replace(/-/g, " ")}
+              </span>
+            ))}
+        </div>
 
-      {/* Footer: installs + action */}
-      <div className="mt-auto flex items-center justify-between pt-1">
-        {entry.installs != null && (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
-            <Download className="h-3 w-3" />
-            {fmtInstalls(entry.installs)} installs
-          </span>
-        )}
-        {entry.installs == null && <span />}
-
-        <div onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
           {isInstalled ? (
             <Button
               size="sm"
               variant="outline"
-              className="gap-1.5 border-green-500/25 bg-green-500/8 text-green-500 hover:bg-green-500/15 hover:text-green-500"
+              className="h-7 gap-1 border-green-500/25 bg-green-500/8 px-2 text-xs text-green-500 hover:bg-green-500/15 hover:text-green-500"
             >
               <Check className="h-3 w-3" />
-              Active
+              Installed
             </Button>
           ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />
-                  Add
+                <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs">
+                  <Plus className="h-3 w-3" />
+                  Install
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
