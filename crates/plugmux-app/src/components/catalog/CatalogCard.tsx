@@ -1,4 +1,5 @@
 import { Bookmark, BadgeCheck, Check, Download, Plus } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -57,18 +58,27 @@ export function CatalogCard({
       className="group flex cursor-pointer flex-col gap-3 rounded-xl border bg-card p-5 transition-colors hover:border-primary/40"
       onClick={onClick}
     >
-      {/* Header: icon + name + badges + bookmark */}
+      {/* Header: avatar + name + badges + bookmark */}
       <div className="flex items-start gap-3">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] font-mono text-[15px] font-bold"
-          style={{
-            color,
-            background: `color-mix(in srgb, ${color} 12%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
-          }}
-        >
-          {initial}
-        </div>
+        <Avatar className="h-10 w-10 shrink-0 rounded-lg">
+          {entry.icon && (
+            <AvatarImage
+              src={`/v1/icons/${entry.icon}`}
+              alt={entry.name}
+              className="rounded-lg"
+            />
+          )}
+          <AvatarFallback
+            className="rounded-lg font-mono text-[15px] font-bold"
+            style={{
+              color,
+              background: `color-mix(in srgb, ${color} 12%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
+            }}
+          >
+            {initial}
+          </AvatarFallback>
+        </Avatar>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2">

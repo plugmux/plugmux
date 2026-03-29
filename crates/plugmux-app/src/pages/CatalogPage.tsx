@@ -355,7 +355,7 @@ export function CatalogPage() {
                   placeholder="Search servers..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
+                  className="h-8 pl-9"
                 />
               </div>
               {tab === Tab.DISCOVER && (
