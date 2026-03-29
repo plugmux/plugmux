@@ -14,6 +14,12 @@ import { CatalogCard } from "@/components/catalog/CatalogCard";
 import { CatalogDetail } from "@/components/catalog/CatalogDetail";
 import { CategoryFilter } from "@/components/catalog/CategoryFilter";
 import { Pagination } from "@/components/catalog/Pagination";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useCatalog } from "@/hooks/useCatalog";
 import { useConfig } from "@/hooks/useConfig";
 import type { RemoteCatalogServer } from "@/lib/commands";
@@ -277,38 +283,51 @@ export function CatalogPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-8">
+              <Accordion type="multiple" className="space-y-2">
                 {collections.map((col) => {
                   const colServers = servers.filter((s) =>
                     (col.server_ids ?? []).includes(s.id)
                   );
                   if (colServers.length === 0) return null;
                   return (
-                    <section key={col.id}>
-                      <h2 className="mb-1 text-lg font-semibold">
-                        For {col.name}
-                      </h2>
-                      <p className="mb-3 text-sm text-muted-foreground">
-                        {col.description}
-                      </p>
-                      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-                        {colServers.map((entry) => (
-                          <CatalogCard
-                            key={entry.id}
-                            entry={toCatalogEntry(entry)}
-                            installedIn={getInstalledIn(entry.id)}
-                            environments={environments}
-                            isBookmarked={bookmarks.has(entry.id)}
-                            onAdd={(envId) => handleAdd(entry.id, envId)}
-                            onToggleBookmark={() => toggleBookmark(entry.id)}
-                            onClick={() => setDetailEntry(toCatalogEntry(entry))}
-                          />
-                        ))}
-                      </div>
-                    </section>
+                    <AccordionItem
+                      key={col.id}
+                      value={col.id}
+                      className="rounded-lg border bg-card px-4"
+                    >
+                      <AccordionTrigger className="py-3 hover:no-underline">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[15px] font-semibold">
+                            For {col.name}
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className="h-5 px-1.5 text-[11px]"
+                          >
+                            {colServers.length}
+                          </Badge>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-4 pt-1">
+                        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+                          {colServers.map((entry) => (
+                            <CatalogCard
+                              key={entry.id}
+                              entry={toCatalogEntry(entry)}
+                              installedIn={getInstalledIn(entry.id)}
+                              environments={environments}
+                              isBookmarked={bookmarks.has(entry.id)}
+                              onAdd={(envId) => handleAdd(entry.id, envId)}
+                              onToggleBookmark={() => toggleBookmark(entry.id)}
+                              onClick={() => setDetailEntry(toCatalogEntry(entry))}
+                            />
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
                   );
                 })}
-              </div>
+              </Accordion>
             )}
           </>
         )}
