@@ -419,7 +419,7 @@ export function CatalogPage() {
 
             {/* Bottom pagination */}
             {total > PER_PAGE && (
-              <div className="mt-6 flex justify-center">
+              <div className="mt-6 flex justify-end">
                 <Pagination total={total} page={page} perPage={PER_PAGE} onChange={setPage} />
               </div>
             )}
