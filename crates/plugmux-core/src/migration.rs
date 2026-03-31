@@ -78,7 +78,7 @@ pub fn migrate(catalog: &CatalogRegistry, db: &Arc<Db>) -> Result<(), ConfigErro
         permissions: Default::default(),
         device_id: uuid::Uuid::new_v4().to_string(),
         onboarding_shown: false,
-        api_url: "https://plugmux-api.plugmux.workers.dev".to_string(),
+        api_url: "https://plugmux-api.lasharela.workers.dev".to_string(),
     };
     config::save(&config_path, &cfg)?;
 

@@ -36,7 +36,7 @@ fn default_device_id() -> String {
 }
 
 fn default_api_url() -> String {
-    "https://plugmux-api.plugmux.workers.dev".to_string()
+    "https://plugmux-api.lasharela.workers.dev".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
